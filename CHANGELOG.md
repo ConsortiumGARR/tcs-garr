@@ -1,3 +1,9 @@
+## 0.5.1 (2025-02-19)
+
+### Fix
+
+- Fix parameters for request certificate.
+
 ## 0.5.0 (2025-02-18)
 
 ### Feat

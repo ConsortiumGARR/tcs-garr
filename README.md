@@ -1,6 +1,6 @@
 # TCS-GARR Client
 
-![Version](https://img.shields.io/badge/Version-0.5.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/Version-0.5.1-brightgreen.svg)
 
 [![python](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
