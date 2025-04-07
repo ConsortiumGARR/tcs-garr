@@ -1,3 +1,11 @@
+## 0.21.0-rc.1 (2025-04-07)
+
+### Fix
+
+- Poetry lock
+- Fix python version
+- Bump version of some packages
+
 ## 0.21.0-rc.0 (2025-04-07)
 
 ### Feat
