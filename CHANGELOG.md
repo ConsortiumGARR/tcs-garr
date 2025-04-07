@@ -1,3 +1,10 @@
+## 0.21.0-rc.2 (2025-04-07)
+
+### Fix
+
+- Migrate pre-commit config
+- revert pyproject
+
 ## 0.21.0-rc.1 (2025-04-07)
 
 ### Fix
