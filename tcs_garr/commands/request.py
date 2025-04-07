@@ -13,7 +13,7 @@ from cryptography.x509.extensions import ExtensionNotFound
 
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.exceptions import CertificateNotApprovedException
-from tcs_garr.utils import UserRole, load_config
+from tcs_garr.utils import UserRole
 
 
 class RequestCommand(BaseCommand):
@@ -83,8 +83,7 @@ class RequestCommand(BaseCommand):
             str: The output folder path from the configuration.
         """
         # Load environment-specific configuration
-        username, password, totp_seed, output_folder = load_config(self.args.environment)
-        return output_folder
+        return self.harica_config.output_folder
 
     def execute(self):
         """
@@ -98,21 +97,18 @@ class RequestCommand(BaseCommand):
             self.parser.error("--alt_names cannot be used with --csr.")
             exit(1)
 
-        harica_client = self.harica_client()
-        output_folder = self.get_output_folder()
-
         if self.args.cn:
             # Generate a CSR and request a certificate
-            csr_path = self.__generate_key_csr(harica_client, self.args.cn, self.args.alt_names, output_folder)
-            cn, certificate_id = self.__issue_certificate(harica_client, csr_path, self.args.profile)
+            csr_path = self.__generate_key_csr(self.args.cn, self.args.alt_names, self.harica_config.output_folder)
+            cn, certificate_id = self.__issue_certificate(csr_path, self.args.profile)
         else:
             # CSR has been provided, just issue the certificate
-            cn, certificate_id = self.__issue_certificate(harica_client, self.args.csr, self.args.profile)
+            cn, certificate_id = self.__issue_certificate(self.args.csr, self.args.profile)
 
         if self.args.wait:
-            self.__wait_for_certificate_approval(harica_client, cn, certificate_id)
+            self.__wait_for_certificate_approval(cn, certificate_id)
 
-    def __generate_key_csr(self, harica_client, cn, alt_names, output_folder):
+    def __generate_key_csr(self, cn, alt_names, output_folder):
         """
         Generates a private key and CSR for the specified common name and alternative names.
 
@@ -120,7 +116,6 @@ class RequestCommand(BaseCommand):
         names (SANs), and saves both the private key and CSR to the specified output folder.
 
         Args:
-            harica_client (object): The Harica client to interact with the API.
             cn (str): The Common Name for the certificate.
             alt_names (str): A comma-separated list of alternative names.
             output_folder (str): The folder where the private key and CSR will be saved.
@@ -134,7 +129,7 @@ class RequestCommand(BaseCommand):
             if alt_name and alt_name not in domains:
                 domains.append(alt_name)
 
-        organizations = harica_client.get_matching_organizations(domains)
+        organizations = self.harica_client.get_matching_organizations(domains)
 
         if not organizations:
             self.logger.error("No available organization for this domain list")
@@ -199,7 +194,7 @@ class RequestCommand(BaseCommand):
 
         return csr_path
 
-    def __issue_certificate(self, harica_client, csr_file, profile):
+    def __issue_certificate(self, csr_file, profile):
         """
         Issues a certificate request by submitting a CSR to the Harica client.
 
@@ -207,7 +202,6 @@ class RequestCommand(BaseCommand):
         It also handles logging and outputs relevant information, including certificate IDs and download instructions.
 
         Args:
-            harica_client (object): The Harica client to interact with the API.
             csr_file (str): The path to the CSR file.
             profile (str): The certificate profile (OV or DV) to use for the request.
         """
@@ -234,7 +228,7 @@ class RequestCommand(BaseCommand):
 
                 self.logger.info(f"{Fore.YELLOW}Submitting CSR to Harica... Please wait...{Style.RESET_ALL}")
 
-                cert_id = harica_client.request_certificate(
+                cert_id = self.harica_client.request_certificate(
                     domains, csr.public_bytes(serialization.Encoding.PEM).decode(), profile
                 )
 
@@ -257,7 +251,7 @@ class RequestCommand(BaseCommand):
             self.logger.error(f"{Fore.RED}CSR file {csr_file} not found.{Style.RESET_ALL}")
             exit(1)
 
-    def __wait_for_certificate_approval(self, harica_client, cn, certificate_id):
+    def __wait_for_certificate_approval(self, cn, certificate_id):
         """
         Waits for the certificate to be approved by polling the Harica service.
 
@@ -265,7 +259,6 @@ class RequestCommand(BaseCommand):
         between retries. If approval is not received after several attempts, it raises an exception.
 
         Args:
-            harica_client (object): The Harica client to interact with the API.
             cn (str): The common name of the certificate.
             certificate_id (str): The ID of the certificate being requested.
         """
@@ -276,7 +269,7 @@ class RequestCommand(BaseCommand):
         while retries < max_retries:
             try:
                 self.logger.info(f"{Fore.YELLOW}Checking certificate status for ID {certificate_id}...{Style.RESET_ALL}")
-                certificate = harica_client.get_certificate(certificate_id)
+                certificate = self.harica_client.get_certificate(certificate_id)
 
                 data_to_write = certificate.get("pemBundle")
 

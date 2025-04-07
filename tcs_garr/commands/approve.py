@@ -57,19 +57,18 @@ class ApproveCommand(BaseCommand):
         - If --all is provided, it approves all pending certificates.
         - If --list-pending is provided, it lists all pending certificate requests.
         """
-        harica_client = self.harica_client()
 
         if self.args.id:
             # Approve specific transactions by ID
-            self.__approve_transactions(harica_client, self.args.id.split(","))
+            self.__approve_transactions(self.args.id.split(","))
         elif self.args.all:
             # Approve all pending transactions
-            self.__approve_transactions(harica_client)
+            self.__approve_transactions()
         elif self.args.list_pending:
             # List all pending certificate requests
-            self.__list_pending_certificates(harica_client)
+            self.__list_pending_certificates()
 
-    def __approve_transactions(self, harica_client, ids=None):
+    def __approve_transactions(self, ids=None):
         """
         Approves transactions by ID or approves all pending transactions.
 
@@ -78,18 +77,17 @@ class ApproveCommand(BaseCommand):
         the success or failure message.
 
         Args:
-            harica_client (object): The Harica client to interact with the API.
             ids (list, optional): A list of certificate transaction IDs to approve. Defaults to None.
         """
         if ids is None:
             # If no IDs are provided, retrieve the list of pending transactions
-            transactions = harica_client.get_pending_transactions()
+            transactions = self.harica_client.get_pending_transactions()
             ids = [transaction["transactionId"] for transaction in transactions]
 
         for id in ids:
             try:
                 # Try to approve the certificate with the specified ID
-                if harica_client.approve_transaction(id):
+                if self.harica_client.approve_transaction(id):
                     # Log success if the transaction is approved
                     self.logger.info(f"Certificate with ID {id} has been approved.")
                     self.logger.info(
@@ -102,19 +100,16 @@ class ApproveCommand(BaseCommand):
                 # Log error if trying to approve a certificate that the user cannot approve (own request)
                 self.logger.error(f"Failed to approve certificate with ID {id}. You cannot approve your own request.")
 
-    def __list_pending_certificates(self, harica_client):
+    def __list_pending_certificates(self):
         """
         Lists all pending certificate requests.
 
         This method retrieves all pending transactions and logs them in a tabular format,
         displaying the transaction ID, the domains associated with the request, the status,
         and the user who requested the certificate.
-
-        Args:
-            harica_client (object): The Harica client to interact with the API.
         """
         # Retrieve the list of pending transactions
-        transactions = harica_client.get_pending_transactions()
+        transactions = self.harica_client.get_pending_transactions()
 
         # Prepare the data to be displayed in a table
         data = []

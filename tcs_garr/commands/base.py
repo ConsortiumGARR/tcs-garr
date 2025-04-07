@@ -3,7 +3,7 @@ from colorama import Fore, Style
 
 from tcs_garr.harica_client import HaricaClient
 from tcs_garr.logger import setup_logger
-from tcs_garr.utils import load_config
+from tcs_garr.utils import HaricaClientConfig
 
 
 class BaseCommand(ABC):
@@ -22,6 +22,10 @@ class BaseCommand(ABC):
         # Default help text (should be overridden by subclasses)
         self.help_text = "No description available"
 
+        self._harica_client = None
+
+        self._harica_config = None
+
     @abstractmethod
     def configure_parser(self, parser):
         """
@@ -32,13 +36,26 @@ class BaseCommand(ABC):
         """
         pass
 
+    @property
     def harica_client(self):
-        username, password, totp_seed, output_folder = load_config(self.args.environment)
+        if not self._harica_client:
+            self._harica_client = HaricaClient(
+                self.harica_config.username,
+                self.harica_config.password,
+                self.harica_config.totp_seed,
+                http_proxy=self.harica_config.http_proxy,
+                https_proxy=self.harica_config.https_proxy,
+                environment=self.args.environment,
+            )
+        self.check_required_role(self._harica_client)
 
-        harica_client = HaricaClient(username, password, totp_seed, environment=self.args.environment)
-        self.check_required_role(harica_client)
+        return self._harica_client
 
-        return harica_client
+    @property
+    def harica_config(self):
+        if not self._harica_config:
+            self._harica_config = HaricaClientConfig(environment=self.args.environment)
+        return self._harica_config
 
     def check_required_role(self, client: HaricaClient):
         """Check if the user has the required role for the command."""

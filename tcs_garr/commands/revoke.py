@@ -65,14 +65,13 @@ class RevokeCommand(BaseCommand):
         """
         Executes the command to revoke a certificate using the provided ID.
         """
-        client = self.harica_client()
-        is_user_only = client.has_role(UserRole.USER) and len(client.roles) == 1
+        is_user_only = self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1
 
         id = self.args.id
         if is_user_only:
-            cert = client.get_user_certificate(id)
+            cert = self.harica_client.get_user_certificate(id)
         else:
-            cert = client.get_certificate(id)
+            cert = self.harica_client.get_certificate(id)
 
         if not self.is_certificate_valid_for_revocation(cert):
             exit(1)
@@ -104,8 +103,8 @@ class RevokeCommand(BaseCommand):
             exit(1)
 
         revoke_methods = {
-            True: client.revoke_user_certificate,
-            False: client.revoke_certificate,
+            True: self.harica_client.revoke_user_certificate,
+            False: self.harica_client.revoke_certificate,
         }
 
         # Pick the appropriate revoke function

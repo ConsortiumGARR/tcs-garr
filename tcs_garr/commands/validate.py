@@ -52,14 +52,11 @@ class ValidateCommand(BaseCommand):
         Logs the result for each domain:
         - Green check mark (✅) if the prevalidation has been submitted successfully.
         """
-        # Get the Harica client instance
-        harica_client = self.harica_client()
-
         # Split the comma-separated domains into a list
         domains = self.args.domains.split(",")
 
         # Submit the domains for validation via the Harica client
-        harica_client.validate_domains(domains)
+        self.harica_client.validate_domains(domains)
 
         # Log the result for each domain
         for domain in domains:

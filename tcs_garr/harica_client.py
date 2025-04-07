@@ -27,12 +27,21 @@ class HaricaClient:
         email (str): The email of the user for login.
         password (str): The password of the user for login.
         totp_seed (str): Optional TOTP seed for 2FA.
+        http_proxy (str): Optional proxy configuration for HTTP requests.
+        https_proxy (str): Optional proxy configuration for HTTPS requests.
         environment (str): The environment of the CertManager ("dev", "stg", or "production").
         refresh_interval (int): Time in seconds before the JWT token needs to be refreshed.
     """
 
     def __init__(
-        self, email: str, password: str, totp_seed: str = None, environment: str = "production", refresh_interval: int = 3600
+        self,
+        email: str,
+        password: str,
+        totp_seed: str = None,
+        http_proxy: str = None,
+        https_proxy: str = None,
+        environment: str = "production",
+        refresh_interval: int = 3600,
     ):
         self.environment = environment
         self.email = email
@@ -42,6 +51,12 @@ class HaricaClient:
         self.login_lock = Lock()
         self.base_url = self.get_base_url()  # Set the base URL depending on the environment
         self.session = requests.Session()  # Reuse session for efficient requests
+
+        # Configure proxies if provided
+        if any([http_proxy, https_proxy]):
+            self.session.proxies.update({"http": http_proxy, "https": https_proxy})
+            logger.info(f"Configured proxies: {self.proxies}")
+
         self.token = None  # JWT token
         self.request_verification_token = None  # CSRF token
         self.roles = set()
@@ -66,6 +81,9 @@ class HaricaClient:
                 self.login()  # Perform login
             except PermissionError:
                 logger.error("❌ Login failed. Check possible errors in provided credentials.")
+                exit(1)
+            except requests.exceptions.ProxyError as e:
+                logger.error(f"❌ Proxy connection error: {e}")
                 exit(1)
 
     def token_is_valid(self):
@@ -670,25 +688,33 @@ class HaricaClient:
         # Construct the full URL for the request
         url = f"{self.base_url}{endpoint}"
 
-        # Send the request based on the chosen method (GET or POST)
-        if method == "GET":
-            response = self.session.get(url)
-        elif method == "POST":
-            # Handle different content types for POST requests
-            if content_type == "multipart/form-data":
-                response = self.session.post(url, files=data)
+        try:
+            # Send the request based on the chosen method (GET or POST)
+            if method == "GET":
+                response = self.session.get(url)
+            elif method == "POST":
+                # Handle different content types for POST requests
+                if content_type == "multipart/form-data":
+                    response = self.session.post(url, files=data)
+                else:
+                    response = self.session.post(url, json=data)
             else:
-                response = self.session.post(url, json=data)
-        else:
-            raise ValueError("Unsupported method. Use 'GET' or 'POST'.")
+                raise ValueError("Unsupported method. Use 'GET' or 'POST'.")
 
-        if response.status_code == 400 or response.status_code == 401:
-            raise PermissionError(f"Permission Denied: {response.status_code}")
-        elif response.status_code != 200:
-            logging.error(f"API request failed with status code {response.status_code}: {response.text}")
+            if response.status_code == 400 or response.status_code == 401:
+                raise PermissionError(f"Permission Denied: {response.status_code}")
+            elif response.status_code != 200:
+                logging.error(f"API request failed with status code {response.status_code}: {response.text}")
 
-        # Return the response object for further processing
-        return response
+            # Return the response object for further processing
+            return response
+
+        except requests.exceptions.ProxyError as e:
+            logger.error(f"Proxy error during {method} request to {url}: {e}")
+            raise
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error during {method} request to {url}: {e}")
+            raise
 
     def __make_get_request(self, endpoint, content_type="application/json"):
         """

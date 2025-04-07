@@ -55,14 +55,11 @@ class DomainsCommand(BaseCommand):
         - Yellow if expiring within 30 days
         - Green if valid for more than 30 days
         """
-        # Get the Harica client instance
-        harica_client = self.harica_client()
-
         # Get the current time
         current_time = datetime.now()
 
         # Iterate through the list of domains retrieved from the Harica client
-        for item in harica_client.list_domains():
+        for item in self.harica_client.list_domains():
             domain = item["domain"]
             # Parse the validity date from the domain information
             validity = datetime.strptime(item["validity"], "%Y-%m-%dT%H:%M:%S.%f")

@@ -49,11 +49,11 @@ class WhoamiCommand(BaseCommand):
         Args:
             args: Parsed command-line arguments (not used for this command).
         """
-        # Get an instance of the Harica client, using the provided arguments (if any)
-        client = self.harica_client()
 
         # Log the user's full name and email in green-colored output
         self.logger.info(
-            f"{Fore.GREEN}👤 Hi! You're logged in as {client.full_name} ({client.email}) on {self.args.environment} environment{Style.RESET_ALL}"
+            f"{Fore.GREEN}👤 Hi! You're logged in as {self.harica_client.full_name} ({self.harica_client.email}) on {self.args.environment} environment{Style.RESET_ALL}"
         )
-        self.logger.info(f"{Fore.GREEN}🔒 You have the following roles: {client.get_user_roles()}{Style.RESET_ALL}")
+        self.logger.info(
+            f"{Fore.GREEN}🔒 You have the following roles: {self.harica_client.get_user_roles()}{Style.RESET_ALL}"
+        )

@@ -40,11 +40,8 @@ class CancelCommand(BaseCommand):
         Uses the Harica client to send the cancellation request.
         Logs the result of the operation, indicating success or failure.
         """
-        # Get the Harica client instance
-        harica_client = self.harica_client()
-
         # Attempt to cancel the transaction using the provided ID
-        if harica_client.cancel_transaction(self.args.id):
+        if self.harica_client.cancel_transaction(self.args.id):
             # Log success message
             self.logger.info(f"Transaction with ID {self.args.id} has been canceled.")
         else:

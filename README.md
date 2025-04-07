@@ -63,20 +63,20 @@ and who has not been granted any additional roles by an administrator.
 
 Other roles, apart from **USER**, require 2FA and are provided by an administrator.
 
-| Command  |       Role Needed       | 2FA Needed |
+| Command  | Role Needed             | 2FA Needed |
 | -------- | ----------------------- | ---------- |
-| approve  | SSL_ENTERPRISE_APPROVER | ✔️         |
-| cancel   | USER                    | ❌         |
-| domains  | ENTERPRISE_ADMIN        | ✔️         |
-| download | USER                    | ❌         |
-| init     | None                    | ❌         |
-| k8s      | None                    | ❌         |
-| list     | USER                    | ❌         |
-| request  | USER                    | ❌         |
-| revoke   | USER                    | ❌         |
-| upgrade  | None                    | ❌         |
-| validate | ENTERPRISE_ADMIN        | ✔️         |
-| whoami   | USER                    | ❌         |
+| approve  | SSL_ENTERPRISE_APPROVER | ✔️          |
+| cancel   | USER                    | ❌          |
+| domains  | ENTERPRISE_ADMIN        | ✔️          |
+| download | USER                    | ❌          |
+| init     | None                    | ❌          |
+| k8s      | None                    | ❌          |
+| list     | USER                    | ❌          |
+| request  | USER                    | ❌          |
+| revoke   | USER                    | ❌          |
+| upgrade  | None                    | ❌          |
+| validate | ENTERPRISE_ADMIN        | ✔️          |
+| whoami   | USER                    | ❌          |
 
 ## Installation
 
@@ -125,11 +125,21 @@ tcs-garr init
 ```
 
 This will create a `tcs-garr.conf` file in your home directory under `.config/tcs-garr`
-path. This file will contain your Harica username, password, TOTP seed, and folder for
-issued certificates and will have secure permissions.
+path. This file will contain your Harica username, password, TOTP seed, folder for
+issued certificates, and HTTP/HTTPS proxy settings (if needed). The file will have secure permissions.
 
-If configuration file is not found, system will notify you to initialize the
+If a configuration file is not found, the system will notify you to initialize the
 configuration using the `tcs-garr init` command.
+
+### Updating Configuration
+
+If you need to update your configuration (including adding or modifying proxy settings), you can use:
+
+```bash
+tcs-garr init --force
+```
+
+This will override existing parameters with new values. You can use this command to add or update HTTP/HTTPS proxy settings.
 
 ## Usage
 
@@ -197,7 +207,13 @@ tcs-garr --environment stg init
    ```
 
    This command initializes the configuration file with your credentials (email,
-   password, and TOTP seed).
+   password, TOTP seed, output folder, and optional proxy settings).
+
+   To update an existing configuration or add proxy settings:
+
+   ```bash
+   tcs-garr init --force
+   ```
 
 2. **Get user profile**:
 
@@ -409,6 +425,8 @@ docker build -t tcs-garr:latest .
 | HARICA_PASSWORD      | Password for HARICA authentication | None                  |
 | HARICA_TOTP_SEED     | TOTP seed for two-factor auth      | None                  |
 | HARICA_OUTPUT_FOLDER | Directory for output files         | ~/harica_certificates |
+| HARICA_HTTP_PROXY    | HTTP Proxy                         | None                  |
+| HARICA_HTTPS_PROXY   | HTTPS Proxy                        | None                  |
 
 ### Run
 
@@ -428,6 +446,8 @@ docker run --name tcs-garr \
   -e HARICA_PASSWORD=${HARICA_PASSWORD} \
   -e HARICA_TOTP_SEED=${HARICA_TOTP_SEED} \
   -e HARICA_OUTPUT_FOLDER=${HARICA_OUTPUT_FOLDER} \
+  -e HARICA_HTTP_PROXY=${HARICA_HTTP_PROXY} \
+  -e HARICA_HTTPS_PROXY=${HARICA_HTTPS_PROXY} \
   -v ${HARICA_OUTPUT_FOLDER}:${HARICA_OUTPUT_FOLDER} \
   tcs-garr:latest request --cn <domain> --alt_names <alt_names>
 ```

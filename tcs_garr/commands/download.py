@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.serialization import pkcs7
 
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.exceptions import CertificateNotApprovedException
-from tcs_garr.utils import UserRole, load_config
+from tcs_garr.utils import UserRole
 
 
 class DownloadCommand(BaseCommand):
@@ -66,8 +66,7 @@ class DownloadCommand(BaseCommand):
             str: The output folder path from the configuration.
         """
         # Load environment-specific configuration
-        username, password, totp_seed, output_folder = load_config(self.args.environment)
-        return output_folder
+        return self.harica_config.output_folder
 
     def get_trusted_intermediates(self):
         """
@@ -175,15 +174,13 @@ class DownloadCommand(BaseCommand):
         """
         Executes the command to download the certificate by ID, inspect and complete the chain, and save or print the certificate.
         """
-        client = self.harica_client()
-
         try:
             # if user role is only USER and does not have any other role
             # do not use enterprise apis
-            if client.has_role(UserRole.USER) and len(client.roles) == 1:
-                certificate = client.get_user_certificate(self.args.id)
+            if self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1:
+                certificate = self.harica_client.get_user_certificate(self.args.id)
             else:
-                certificate = client.get_certificate(self.args.id)
+                certificate = self.harica_client.get_certificate(self.args.id)
 
             if not certificate:
                 self.logger.error("Certificate not found.")

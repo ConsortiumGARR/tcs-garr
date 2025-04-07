@@ -9,7 +9,7 @@ from dateutil import parser
 from tabulate import tabulate
 
 from tcs_garr.commands.base import BaseCommand
-from tcs_garr.utils import CertificateStatus, UserRole, load_config
+from tcs_garr.utils import CertificateStatus, UserRole
 
 
 class ListCertificatesCommand(BaseCommand):
@@ -180,12 +180,11 @@ class ListCertificatesCommand(BaseCommand):
         # Return cn_value or "CN not found"
         return cn_value if cn_value else "CN not found"
 
-    def list_certificates_as_admin(self, client, username, statuses):
+    def list_certificates_as_admin(self, username, statuses):
         """
         List certificates as admin user
 
         Args:
-            client (HaricaClient): A client instance
             username (str): Username to filter certificates by
             statuses (list): List of certificate statuses to filter
 
@@ -198,7 +197,7 @@ class ListCertificatesCommand(BaseCommand):
         for status in statuses:
             start_index = 0
             while True:
-                response = client.list_certificates(
+                response = self.harica_client.list_certificates(
                     start_index=start_index,
                     status=status,
                 )
@@ -211,19 +210,18 @@ class ListCertificatesCommand(BaseCommand):
 
         return self._filter_certificates(certificates, statuses, username)
 
-    def list_certificates_as_user(self, client, statuses):
+    def list_certificates_as_user(self, statuses):
         """
         List certificates as a regular user.
 
         Args:
-            client (HaricaClient): A client instance.
             statuses (list): List of certificate statuses to filter.
 
         Returns:
             list: List of certificates.
             dict: Recap.
         """
-        certificates = client.list_user_certificates()
+        certificates = self.harica_client.list_user_certificates()
         return self._filter_certificates(certificates, statuses)
 
     def execute(self):
@@ -239,7 +237,8 @@ class ListCertificatesCommand(BaseCommand):
                   certificate expiration dates.
         """
         # Load configs
-        conf_user, _, _, output_folder = load_config(self.args.environment)
+        conf_user = self.harica_config.username
+        output_folder = self.harica_config.output_folder
 
         # Get the current UTC date and time
         current_date = pytz.utc.localize(datetime.now())
@@ -247,9 +246,6 @@ class ListCertificatesCommand(BaseCommand):
         # Calculate the date range based on expired_since or expiring_in arguments, if provided
         from_date = current_date - timedelta(days=self.args.expired_since) if self.args.expired_since is not None else None
         to_date = current_date + timedelta(days=self.args.expiring_in) if self.args.expiring_in is not None else None
-
-        # Get the Harica client instance
-        client = self.harica_client()
 
         # Get username if specified in args
         # True when --user without arg
@@ -272,11 +268,10 @@ class ListCertificatesCommand(BaseCommand):
 
         # if user role is only USER and does not have any other role
         # get only user certificates
-        if client.has_role(UserRole.USER) and len(client.roles) == 1:
-            certificates, recap = self.list_certificates_as_user(client, statuses)
+        if self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1:
+            certificates, recap = self.list_certificates_as_user(statuses)
         else:
             certificates, recap = self.list_certificates_as_admin(
-                client,
                 username,
                 statuses,
             )

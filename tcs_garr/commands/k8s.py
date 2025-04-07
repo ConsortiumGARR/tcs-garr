@@ -4,7 +4,6 @@ import os
 from colorama import Fore, Style
 
 from tcs_garr.commands.base import BaseCommand
-from tcs_garr.utils import load_config
 
 
 class K8sCommand(BaseCommand):
@@ -61,8 +60,7 @@ class K8sCommand(BaseCommand):
             str: The output folder path from the configuration.
         """
         # Load environment-specific configuration to get the output folder
-        _, _, _, output_folder = load_config(self.args.environment)
-        return output_folder
+        return self.harica_config.output_folder
 
     def execute(self):
         """
