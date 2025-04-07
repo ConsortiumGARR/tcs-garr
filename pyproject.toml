@@ -4,7 +4,7 @@ version = "0.21.0-rc.0"
 description = "Command-line tool to manage and interact with Harica platform"
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
-requires-python = ">3.9.0,<3.9.1 || >3.9.1,<4.0"
+requires-python = ">3.9.1,<4.0"
 dynamic = ["dependencies", "classifiers"]
 authors = [{ name = "Consortium GARR", email = "system.support@garr.it" }]
 maintainers = [{ name = "Consortium GARR", email = "system.support@garr.it" }]
@@ -21,7 +21,7 @@ tcs-garr = "tcs_garr.main:main"
 include = ["chain/**"]
 
 [tool.poetry.dependencies]
-python = ">3.9.0,<3.9.1 || >3.9.1,<4.0"
+python = ">3.9.1,<4.0"
 cryptography = "^44.0.2"
 tabulate = "^0.9.0"
 pytz = "^2024.1"
