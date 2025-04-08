@@ -1,3 +1,9 @@
+## 0.21.0-rc.3 (2025-04-08)
+
+### Fix
+
+- Documentation of Contributing fixed
+
 ## 0.21.0-rc.2 (2025-04-07)
 
 ### Fix
