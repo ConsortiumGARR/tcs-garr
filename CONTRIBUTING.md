@@ -126,7 +126,7 @@ Install and activate the hooks:
 ```sh
 poetry self add poetry-pre-commit-plugin
 poetry run pre-commit install
-poetry run pre-commit install --hook-type commit-msg -hook-type pre-push
+poetry run pre-commit install -t commit-msg -t pre-push
 ```
 
 Pre-commit will check only the modified files by default. If you want to check all files (recommended after cloning the repository), run:
