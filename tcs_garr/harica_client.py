@@ -55,7 +55,7 @@ class HaricaClient:
         # Configure proxies if provided
         if any([http_proxy, https_proxy]):
             self.session.proxies.update({"http": http_proxy, "https": https_proxy})
-            logger.info(f"Configured proxies: {self.proxies}")
+            logger.info(f"Configured proxies: {self.session.proxies}")
 
         self.token = None  # JWT token
         self.request_verification_token = None  # CSRF token
