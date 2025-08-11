@@ -1,6 +1,9 @@
+import csv
+import io
 import json
 import logging
 import time
+import zipfile
 from threading import Lock
 from urllib.parse import urljoin
 
@@ -770,6 +773,72 @@ class HaricaClient:
         )
 
         return data.json()["id"]
+
+    def request_single_smime_bulk_certificate(self, emails, gn, sn, csr, transactionType="MV"):
+        """
+        Requests a new S/MIME client certificate based on the provided emails and CSR.
+        Supported validation profiles are Mailbox Validated and Sponsor Validated.
+        Harica calls these "Email Only" and "IV+OV", respectively.
+
+        Args:
+            emails (list): List of Email Addresses.
+            gn (str): Given Name of the Subject (optional).
+            sn (str): Surname of the Subject (optional).
+            csr (str): Certificate signing request.
+
+        Returns:
+            str: The certificate in pkcs7 DER format.
+        """
+
+        cert_type = "email_only" if transactionType == "MV" else "natural_legal_lcp"
+        # ensure all three email fields are used or "" and extract domains:
+        email = [""] * 3
+        domains = []
+        for i, e in enumerate(emails):
+            email[i] = e
+            _, _, domain = e.rpartition("@")
+            domains.append(domain)
+
+        organizations = self.get_matching_organizations(domains)
+
+        if not organizations:
+            raise ValueError("No available organization for this domain list")
+
+        if len(organizations) > 1:
+            raise ValueError("Multiple organizations found.'")
+
+        organization = organizations[0].get('id')
+
+        csvio = io.StringIO()
+        writer = csv.writer(csvio)
+        writer.writerow(["FriendlyName","Email","Email2","Email3","GivenName","Surname","PickupPassword","CertType","CSR"]) # header
+        writer.writerow([email[0], email[0], email[1], email[2], gn, sn, "", cert_type, csr]) # cert data
+        # Note: the example CSV supplied by Harica adds a trailing comma after the CSR (but not on the header line). seems to work without just fine.
+        csvdata = csvio.getvalue()
+
+        # Prepare the payload for the certificate request
+        payload = {
+            "groupId": (None, organization),
+            "csv": ("request.csv", csvdata, "text/csv"),
+        }
+
+        data = self.__make_post_request(
+            "/api/OrganizationAdmin/CreateBulkCertificatesSMIME", data=payload, content_type="multipart/form-data"
+        )
+        if data.history: # empty if not redirected
+            # if user is not authorized, we get redirected to login page (status codes 308->200)
+            raise PermissionError("User is not authorized, must be an admin.")
+        zipped_certificates = data.content
+
+        # the signed certificate is returned immediately, but in a zipfile. extract it.
+        try:
+            zipio = io.BytesIO(zipped_certificates)
+            zipf = zipfile.ZipFile(zipio, "r")
+            p7b_data = next(zipf.read(name) for name in zipf.namelist()) # only contains 1 file, named "1.<FriendlyName>.p7b"
+        except Exception as e:
+            raise ValueError("could not extract certificate from response")
+
+        return p7b_data
 
     def get_pending_transactions(self):
         """

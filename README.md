@@ -83,6 +83,7 @@ Other roles, apart from **USER**, require 2FA and are provided by an administrat
 | list     | USER                    | ❌          |
 | request  | USER                    | ❌          |
 | revoke   | USER                    | ❌          |
+| smime    | ENTERPRISE_ADMIN        | ❌          |
 | upgrade  | None                    | ❌          |
 | validate | ENTERPRISE_ADMIN        | ✔️          |
 | whoami   | USER                    | ❌          |
@@ -185,6 +186,7 @@ positional arguments:
     list                List and filter certificates
     request             Request a new certificate
     revoke              Revoke a certificate by ID
+    smime               Request a new S/MIME certificate
     test                Test Harica API endpoints
     upgrade             Self-upgrade command for the app.
     validate            Create validation token for domains
@@ -501,7 +503,35 @@ tcs-garr --environment stg init
    `disable` and `domains` subcommands to perform these actions. Check `help` for each
    subcommand for more details.
 
-13. **Test apis**:
+13. **Issue S/MIME Certificates**:
+
+   ```bash
+   usage: main.py smime [-h] [--profile {SV,MV}] [--disable-webhook] (--csr CSR | --emails EMAILS) [--gn GN] [--sn SN] [--output-filename OUTPUT_FILENAME] [--force] [--download-type {pemBundle,certificate}]
+
+   options:
+     -h, --help            show this help message and exit
+     --profile {SV,MV}     Profile to use between SV or MV. Default: SV
+     --disable-webhook     Disable calling webhook after submit request. This works only if webhook_url has been configured
+     --csr CSR             Path to an existing CSR file.
+     --emails EMAILS       Comma-separated email addresses of the certificate (up to three).
+     --gn GN               Given Name of the Subject (only used with --email).
+     --sn SN               Surname of the Subject (only used with --email).
+     --output-filename OUTPUT_FILENAME
+                           Optional filename to save the certificate inside the default output folder.
+     --force, -f           Force overwrite if the output file already exists.
+     --download-type {pemBundle,certificate}
+                           Type of download: 'pemBundle' or 'certificate'. Default is 'pemBundle'.
+   ```
+
+   This command allows the user to generate a Certificate Signing Request (CSR)
+   or provide an existing CSR to request a new S/MIME certificate from the
+   Harica service. The user can choose between different certificate profiles
+   (MV, SV). If `MV` (Mailbox Validated, i.e. "Email only") is chosen, the
+   surname and given name attributes must not be provided. For `SV` (Sponsor
+   Validated, i.e. "OV and IV") surname and given name are required.
+   Certificates are returned immediately, without the need for manual approval.
+
+14. **Test apis**:
 
    ```bash
    usage: tcs-garr test [-h] --endpoint ENDPOINT [--data DATA] [--foutput FOUTPUT]
