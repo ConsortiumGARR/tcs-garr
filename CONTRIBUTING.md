@@ -16,6 +16,7 @@ Thank you for considering contributing to TCS-GARR Client! We're excited to have
     - [Installing Dependencies](#installing-dependencies)
   - [Style Guide](#style-guide)
   - [Pre-Commit Hooks](#pre-commit-hooks)
+  - [Handling Pull Requests from GitHub](#handling-pull-requests-from-github)
 
 ## How to Contribute
 
@@ -136,3 +137,37 @@ poetry run pre-commit run --all-files
 ```
 
 These hooks will run automatically on every commit to check code formatting, linting, and other quality checks.
+
+## Handling Pull Requests from GitHub
+
+Our main repository is hosted on **GitLab** and is configured to **mirror pushes to GitHub**.
+If someone opens a **Pull Request (PR) on GitHub**, it **must be merged through GitLab** to keep the repository history consistent.
+
+1. **Fetch the PR locally from GitHub**
+
+   ```bash
+   git remote add github https://github.com/ConsortiumGARR/tcs-garr.git  # only the first time
+   git fetch github pull/<PR_NUMBER>/head:pr-<PR_NUMBER>
+   ```
+
+2. **Push the PR branch to GitLab**
+
+   ```bash
+   git checkout pr-<PR_NUMBER>
+   git push origin pr-<PR_NUMBER>
+   ```
+
+3. **Open a Merge Request on GitLab**
+
+   * Go to GitLab’s web interface.
+   * Create a Merge Request from `pr-<PR_NUMBER>` into `main`.
+   * Review and approve it as usual.
+
+4. **Merge into `main` on GitLab**
+
+   * Once the MR is merged, GitLab will automatically push the updated `main` branch to GitHub.
+
+5. **Close the GitHub PR**
+
+   * The GitHub PR will be automatically closed if the commits match.
+   * Otherwise, close it manually with a note that it was merged via GitLab.
