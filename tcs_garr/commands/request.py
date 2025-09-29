@@ -14,7 +14,6 @@ from cryptography.x509.extensions import ExtensionNotFound
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.exceptions import CertificateNotApprovedException
 from tcs_garr.utils import UserRole
-from tcs_garr.notifications import NotificationManager
 
 
 class RequestCommand(BaseCommand):

@@ -12,7 +12,6 @@ from cryptography.x509.extensions import ExtensionNotFound
 
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.utils import UserRole
-from tcs_garr.notifications import NotificationManager
 
 
 class RequestCommand(BaseCommand):
@@ -213,19 +212,19 @@ class RequestCommand(BaseCommand):
                 subject_alt_names.append(item)
 
         subject = [
-            x509.NameAttribute(NameOID.EMAIL_ADDRESS, email), # must always be present
+            x509.NameAttribute(NameOID.EMAIL_ADDRESS, email),  # must always be present
         ]
         if gn and sn:
-            subject.extend([
-                x509.NameAttribute(NameOID.GIVEN_NAME, gn),
-                x509.NameAttribute(NameOID.SURNAME, sn),
-            ])
+            subject.extend(
+                [
+                    x509.NameAttribute(NameOID.GIVEN_NAME, gn),
+                    x509.NameAttribute(NameOID.SURNAME, sn),
+                ]
+            )
         # Generate a CSR
         csr = (
             x509.CertificateSigningRequestBuilder()
-            .subject_name(
-                x509.Name(subject)
-            )
+            .subject_name(x509.Name(subject))
             .add_extension(
                 x509.SubjectAlternativeName([x509.RFC822Name(x) for x in subject_alt_names]),
                 critical=False,

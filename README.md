@@ -614,6 +614,13 @@ The entrypoint is already set to `tcs-garr`, so just add arguments or options.
 
 Check the [docker-compose](docker-compose.yml) file for more details.
 
+## Contributors
+
+We would like to thank all the contributors to this project:
+
+* [uedvt359](https://github.com/uedvt359)
+* [kaidohTips](https://github.com/kaidohTips)
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0. See the

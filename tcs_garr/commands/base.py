@@ -5,6 +5,7 @@ from colorama import Fore, Style
 
 from tcs_garr.harica_client import HaricaClient
 from tcs_garr.logger import setup_logger
+from tcs_garr.notifications import NotificationManager
 from tcs_garr.utils import HaricaClientConfig
 
 
