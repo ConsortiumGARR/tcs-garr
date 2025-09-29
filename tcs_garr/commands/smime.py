@@ -167,7 +167,7 @@ class RequestCommand(BaseCommand):
             sys.stdout.buffer.write(data_to_write)
 
         if not self.args.disable_webhook:
-            self.__call_webhook(email)
+            self.call_webhook("S/MIME", email)
 
     def __generate_key_csr(self, emails, gn, sn, output_folder):
         """
@@ -295,22 +295,3 @@ class RequestCommand(BaseCommand):
         except FileNotFoundError:
             self.logger.error(f"{Fore.RED}CSR file {csr_file} not found.{Style.RESET_ALL}")
             exit(1)
-
-    def __call_webhook(self, cn):
-        webhook_url = self._harica_config.webhook_url
-        webhook_type = self._harica_config.webhook_type
-        if webhook_url:
-            try:
-                requestor = self._harica_client.email
-
-                manager = NotificationManager(webhook_type=webhook_type, webhook_url=webhook_url)
-
-                title = "S/MIME Certificate Request"
-                message = f"S/MIME Certificate for {cn} has been requested."
-
-                details = {"subject": cn, "username": requestor} # there is no certificate ID with bulk requests
-
-                manager.success(title=title, message=message, details=details)
-
-            except Exception as e:
-                self.logger.error(f"Error sending webhook via NotificationManager: {e}")

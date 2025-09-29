@@ -187,3 +187,25 @@ class BaseCommand(ABC):
             args: The parsed command arguments
         """
         pass
+
+    def call_webhook(self, cert_type, cn, cert_id=None):
+        webhook_url = self._harica_config.webhook_url
+        webhook_type = self._harica_config.webhook_type
+        if webhook_url:
+            try:
+                requestor = self._harica_client.email
+
+                manager = NotificationManager(webhook_type=webhook_type, webhook_url=webhook_url)
+
+                title = f"{cert_type} Certificate Request"
+                message = f"{cert_type} Certificate for {cn} has been requested."
+
+                if cert_id is not None:
+                    details = {"id": cert_id, "username": requestor}
+                else:
+                    details = {"subject": cn, "username": requestor}
+
+                manager.success(title=title, message=message, details=details)
+
+            except Exception as e:
+                self.logger.error(f"Error sending webhook via NotificationManager: {e}")
