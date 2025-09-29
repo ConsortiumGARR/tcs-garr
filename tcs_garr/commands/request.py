@@ -14,7 +14,6 @@ from cryptography.x509.extensions import ExtensionNotFound
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.exceptions import CertificateNotApprovedException
 from tcs_garr.utils import UserRole
-from tcs_garr.notifications import NotificationManager
 
 
 class RequestCommand(BaseCommand):
@@ -116,7 +115,7 @@ class RequestCommand(BaseCommand):
             self.__wait_for_certificate_approval(cn, certificate_id)
 
         if not self.args.disable_webhook:
-            self.__call_webhook(cn, certificate_id)
+            self.call_webhook("TLS", cn, certificate_id)
 
     def __generate_key_csr(self, cn, alt_names, output_folder):
         """
@@ -331,22 +330,3 @@ class RequestCommand(BaseCommand):
 
         self.logger.error(f"{Fore.RED}Certificate approval timed out after {max_retries} retries.{Style.RESET_ALL}")
         exit(1)
-
-    def __call_webhook(self, cn, cert_id):
-        webhook_url = self._harica_config.webhook_url
-        webhook_type = self._harica_config.webhook_type
-        if webhook_url:
-            try:
-                requestor = self._harica_client.email
-
-                manager = NotificationManager(webhook_type=webhook_type, webhook_url=webhook_url)
-
-                title = "Certificate Request"
-                message = f"Certificate for {cn} has been requested."
-
-                details = {"id": cert_id, "username": requestor}
-
-                manager.success(title=title, message=message, details=details)
-
-            except Exception as e:
-                self.logger.error(f"Error sending webhook via NotificationManager: {e}")
