@@ -1,6 +1,7 @@
 import base64
 import importlib.resources as pkg_resources
 import os
+import pathlib
 import warnings
 
 from cryptography import x509
@@ -41,11 +42,18 @@ class DownloadCommand(BaseCommand):
         # Add the argument to specify the certificate ID to download
         parser.add_argument("--id", required=True, help="ID of the certificate to download.")
 
+        # Option for saving the certificate to the filesystem using a default filename
+        parser.add_argument(
+            "--save",
+            action="store_true",
+            default=False,
+            help="Save the certificate inside configured output_folder using a default filename.",
+        )
         # Optional output filename for saving the certificate
         parser.add_argument(
             "--output-filename",
             default=None,
-            help="Optional filename to save the certificate inside the default output folder.",
+            help="Save the certificate inside configured output_folder using a custom filename.",
         )
         # Add force flag to allow overwriting the file
         parser.add_argument("--force", "-f", action="store_true", help="Force overwrite if the output file already exists.")
@@ -57,19 +65,6 @@ class DownloadCommand(BaseCommand):
             default="pemBundle",
             help="Type of download: 'pemBundle' or 'certificate'. Default is 'pemBundle'.",
         )
-
-    def get_output_folder(self):
-        """
-        Retrieve the default output folder from the configuration.
-
-        Args:
-            args (argparse.Namespace): The command-line arguments passed to the command.
-
-        Returns:
-            str: The output folder path from the configuration.
-        """
-        # Load environment-specific configuration
-        return self.harica_config.output_folder
 
     def get_trusted_intermediates(self):
         """
@@ -217,48 +212,65 @@ class DownloadCommand(BaseCommand):
                 p7b_data = base64.b64decode(p7b_base64)
 
                 # Load and extract the certificates from the PKCS7 data
-                if p7b_data:
-                    pkcs7_cert = pkcs7.load_der_pkcs7_certificates(p7b_data)
-                    if pkcs7_cert:
-                        certificates = pkcs7_cert
+                if p7b_data and (pkcs7_cert := pkcs7.load_der_pkcs7_certificates(p7b_data)):
+                    certificates = pkcs7_cert
 
-                        # Load trusted intermediates
-                        trusted_intermediates = self.get_trusted_intermediates()
+                    # Load trusted intermediates
+                    trusted_intermediates = self.get_trusted_intermediates()
 
-                        # Complete the certificate chain with trusted intermediates
-                        complete_chain = self.complete_chain(certificates, trusted_intermediates)
+                    # Complete the certificate chain with trusted intermediates
+                    complete_chain = self.complete_chain(certificates, trusted_intermediates)
 
-                        # Convert certificates to PEM format and join them into a single string
-                        data_to_write = "".join(
-                            cert.public_bytes(serialization.Encoding.PEM).decode("utf-8") for cert in complete_chain
-                        )
+                    # Convert certificates to PEM format and join them into a single string
+                    data_to_write = "".join(
+                        cert.public_bytes(serialization.Encoding.PEM).decode("utf-8") for cert in complete_chain
+                    )
 
-                        # Optionally inspect the certificate chain
-                        if not self.inspect_certificate_chain(complete_chain, trusted_intermediates):
-                            self.logger.error("Certificate chain is not complete or valid.")
-                            return
+                    # Optionally inspect the certificate chain
+                    if not self.inspect_certificate_chain(complete_chain, trusted_intermediates):
+                        self.logger.error("Certificate chain is not complete or valid.")
+                        return
 
-            if data_to_write:
-                # Determine the output folder from the config
-                output_folder = self.get_output_folder()
-
-                # If the output folder and filename are provided, save the certificate to a file
-                if output_folder and self.args.output_filename:
-                    output_path = os.path.join(output_folder, self.args.output_filename)
-
-                    # Check if the file already exists, and handle the force flag for overwriting
-                    if os.path.exists(output_path) and not self.args.force:
-                        self.logger.error(f"File {output_path} already exists. Use --force to overwrite.")
-                    else:
-                        # Write the certificate data to the file (binary or text based on data type)
-                        with open(output_path, "wb" if isinstance(data_to_write, bytes) else "w") as cert_file:
-                            cert_file.write(data_to_write)
-                        self.logger.info(f"Certificate saved to {output_path}")
-                else:
-                    # If no filename is provided, print the certificate data
-                    print(data_to_write)
-            else:
+            if not data_to_write:
                 # Handle case where no data is found for the given certificate ID
                 self.logger.error(f"No data found for certificate ID {self.args.id}.")
+
+            elif not self.args.save and not self.args.output_filename:
+                # No options for save to file: print the certificate data
+                print(data_to_write)
+            else:
+                # Save the certificate file under the configured output_folder
+                output_folder = self.get_output_folder()
+
+                # Save with a custom output filename
+                if self.args.output_filename:
+                    output_filepath = pathlib.Path(output_folder).joinpath(self.args.output_filename)
+                else:
+                    cn = certificate["dN"].strip().partition("CN=")[-1].strip()
+                    for chunk in cn.split("."):
+                        if not chunk.replace("-", "").isalnum():
+                            self.logger.error(f"Certificate Common Name ({chunk}) is not valid.")
+                            exit(1)
+
+                    if self.args.download_type == "pemBundle":
+                        filename = cn + "_fullchain.pem"
+                    else:
+                        filename = cn + ".pem"
+
+                    output_filepath = self.get_output_filepath(filename, base_path=output_folder)
+
+                # Check if the file already exists, and handle the force flag for overwriting
+                if output_filepath.is_dir():
+                    self.logger.error(f"File {output_filepath} is a directory!")
+                elif output_filepath.exists() and not self.args.force:
+                    self.logger.error(f"File {output_filepath} already exists. Use --force to overwrite.")
+                else:
+                    output_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Write the certificate data to the file (binary or text based on data type)
+                    with output_filepath.open("wb" if isinstance(data_to_write, bytes) else "w") as cert_file:
+                        cert_file.write(data_to_write)
+                    self.logger.info(f"Certificate saved to {output_filepath}")
+
         except CertificateNotApprovedException:
             self.logger.error(f"Certificate with id {self.args.id} has not been approved yet. Retry later.")

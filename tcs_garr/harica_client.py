@@ -27,7 +27,7 @@ class HaricaClient:
     certificate management, and domain validation. It uses JWT tokens for authentication
     and automatically refreshes the token if needed.
 
-    Attributes:
+    Arguments:
         email (str): The email of the user for login.
         password (str): The password of the user for login.
         totp_seed (str): Optional TOTP seed for 2FA.
@@ -807,12 +807,14 @@ class HaricaClient:
         if len(organizations) > 1:
             raise ValueError("Multiple organizations found.'")
 
-        organization = organizations[0].get('id')
+        organization = organizations[0].get("id")
 
         csvio = io.StringIO()
         writer = csv.writer(csvio)
-        writer.writerow(["FriendlyName","Email","Email2","Email3","GivenName","Surname","PickupPassword","CertType","CSR"]) # header
-        writer.writerow([email[0], email[0], email[1], email[2], gn, sn, "", cert_type, csr]) # cert data
+        writer.writerow(
+            ["FriendlyName", "Email", "Email2", "Email3", "GivenName", "Surname", "PickupPassword", "CertType", "CSR"]
+        )  # header
+        writer.writerow([email[0], email[0], email[1], email[2], gn, sn, "", cert_type, csr])  # cert data
         # Note: the example CSV supplied by Harica adds a trailing comma after the CSR (but not on the header line). seems to work without just fine.
         csvdata = csvio.getvalue()
 
@@ -825,7 +827,7 @@ class HaricaClient:
         data = self.__make_post_request(
             "/api/OrganizationAdmin/CreateBulkCertificatesSMIME", data=payload, content_type="multipart/form-data"
         )
-        if data.history: # empty if not redirected
+        if data.history:  # empty if not redirected
             # if user is not authorized, we get redirected to login page (status codes 308->200)
             raise PermissionError("User is not authorized, must be an admin.")
         zipped_certificates = data.content
@@ -834,7 +836,7 @@ class HaricaClient:
         try:
             zipio = io.BytesIO(zipped_certificates)
             zipf = zipfile.ZipFile(zipio, "r")
-            p7b_data = next(zipf.read(name) for name in zipf.namelist()) # only contains 1 file, named "1.<FriendlyName>.p7b"
+            p7b_data = next(zipf.read(name) for name in zipf.namelist())  # only contains 1 file, named "1.<FriendlyName>.p7b"
         except Exception as e:
             raise ValueError("could not extract certificate from response")
 

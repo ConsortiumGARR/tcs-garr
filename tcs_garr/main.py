@@ -35,11 +35,14 @@ def discover_commands(args):
     return command_classes
 
 
-def main():
+def main(argv=None):
     """
     Main function to handle command line arguments and initiate the certificate issuance or listing process.
+
+    Args:
+        argv (list): Command line arguments (except the command name), if not specified will use sys.argv.
     """
-    parser = argparse.ArgumentParser(description="Harica Certificate Manager")
+    parser = argparse.ArgumentParser(prog="tcs-garr", description="Harica Certificate Manager")
 
     parser.add_argument("--debug", action="store_true", default=False, help="Enable DEBUG logging.")
     parser.add_argument(
@@ -81,7 +84,7 @@ def main():
         cmd_instance.configure_parser(command_parser)
 
     # Parse arguments
-    args = parser.parse_args()
+    args = parser.parse_args(args=argv)
 
     # Now, pass the args to command discovery and update command instances
     command_instances = discover_commands(args)

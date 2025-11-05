@@ -6,6 +6,7 @@ from colorama import Fore, Style
 
 import tcs_garr.settings as settings
 from tcs_garr.commands.base import BaseCommand
+from tcs_garr.utils import OutputTemplate
 
 
 class InitCommand(BaseCommand):
@@ -84,6 +85,7 @@ class InitCommand(BaseCommand):
             "password": "",
             "totp_seed": "",
             "output_folder": settings.OUTPUT_PATH,
+            "output_template": "",
             "http_proxy": "",
             "https_proxy": "",
             "webhook_url": "",
@@ -158,6 +160,25 @@ class InitCommand(BaseCommand):
         # Expand in case input was a relative path
         output_folder = os.path.abspath(os.path.expanduser(output_folder))
 
+        # Prompt for optional output filename setting
+        while True:
+            output_template_prompt = f"{Fore.GREEN}🗎  Enter output_template (optional)"
+            if force and has_existing_config and existing_values["output_template"]:
+                output_template_prompt += f" [{existing_values['output_template']}]"
+            output_template = input(f"{output_template_prompt}: {Style.RESET_ALL}") or (
+                existing_values["output_template"] if force and has_existing_config else ""
+            )
+
+            if output_template:
+                try:
+                    OutputTemplate(output_template)
+                except ValueError:
+                    retry_prompt = f"{Fore.YELLOW} Provided output_template is invalid! Retry? (Y/n)"
+                    retry_option = input(f"{retry_prompt}: {Style.RESET_ALL}")
+                    if retry_option.lower() == "y":
+                        continue
+            break
+
         # Prompt for optional proxy settings with existing values in brackets if force with existing config
         http_proxy_prompt = f"{Fore.GREEN}🌐 Enter HTTP proxy (optional)"
         if force and has_existing_config and existing_values["http_proxy"]:
@@ -206,7 +227,9 @@ class InitCommand(BaseCommand):
             "output_folder": output_folder,
         }
 
-        # Add proxy settings only if they were provided
+        # Add optional settings only if they were provided
+        if output_template:
+            config[section_name]["output_template"] = output_template
         if http_proxy:
             config[section_name]["http_proxy"] = http_proxy
         if https_proxy:

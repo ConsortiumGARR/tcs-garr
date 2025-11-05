@@ -326,14 +326,16 @@ tcs-garr --environment stg init
     -h, --help            show this help message and exit
     --id ID               ID of the certificate to download.
     --output-filename OUTPUT_FILENAME
-                            Optional filename to save the certificate inside default output_folder.
-    --force, -f           Force overwrite if the output file already exists.
+                          Save the certificate inside default output_folder using a custom filename.
+    --save                Save the certificate to a file inside default output_folder using a
+                          filename automatically generated from Common Name and download type.
+   --force, -f            Force overwrite if the output file already exists.
     --download-type {pemBundle,certificate}
-                            Type of download: 'pemBundle' or 'certificate'. Default is 'pemBundle'.
+                          Type of download: 'pemBundle' or 'certificate'. Default is 'pemBundle'.
    ```
 
-   Replace `ID` with the ID of the certificate you wish to download. You can use
-   `pemBundle` or `certificate` as arguments for specific download formats.
+   Replace `ID` with the ID of the certificate you wish to download. For default the certificate is dumped
+   to standard output. You can use `pemBundle` or `certificate` as arguments for specific download formats.
 
    The `download` command allows you to download certificates requested via API or ACME.
 
@@ -568,16 +570,17 @@ docker build -t tcs-garr:latest .
 
 ### Environment variables
 
-| Name                 | Description                        | Default Value         |
-| -------------------- | ---------------------------------- | --------------------- |
-| HARICA_USERNAME      | Username for HARICA authentication | None                  |
-| HARICA_PASSWORD      | Password for HARICA authentication | None                  |
-| HARICA_TOTP_SEED     | TOTP seed for two-factor auth      | None                  |
-| HARICA_OUTPUT_FOLDER | Directory for output files         | ~/harica_certificates |
-| HARICA_HTTP_PROXY    | HTTP Proxy                         | None                  |
-| HARICA_HTTPS_PROXY   | HTTPS Proxy                        | None                  |
-| WEBHOOK_URL          | Webhook URL                        | None                  |
-| WEBHOOK_TYPE         | Webhook Type                       | Slack                 |
+| Name                   | Description                                          | Default Value           |
+|------------------------|------------------------------------------------------|-------------------------|
+| HARICA_USERNAME        | Username for HARICA authentication                   | None                    |
+| HARICA_PASSWORD        | Password for HARICA authentication                   | None                    |
+| HARICA_TOTP_SEED       | TOTP seed for two-factor auth                        | None                    |
+| HARICA_OUTPUT_FOLDER   | Directory for output files                           | `~/harica_certificates` |
+| HARICA_OUTPUT_TEMPLATE | String template to map the Common Name to a filename | None                    |
+| HARICA_HTTP_PROXY      | HTTP Proxy                                           | None                    |
+| HARICA_HTTPS_PROXY     | HTTPS Proxy                                          | None                    |
+| WEBHOOK_URL            | Webhook URL                                          | None                    |
+| WEBHOOK_TYPE           | Webhook Type                                         | Slack                   |
 
 Info about
 [webhook](https://github.com/ConsortiumGARR/tcs-garr?tab=readme-ov-file#webhook)
@@ -601,6 +604,7 @@ docker run --name tcs-garr \
   -e HARICA_PASSWORD=${HARICA_PASSWORD} \
   -e HARICA_TOTP_SEED=${HARICA_TOTP_SEED} \
   -e HARICA_OUTPUT_FOLDER=${HARICA_OUTPUT_FOLDER} \
+  -e HARICA_FILENAME_TEMPLATE=${HARICA_FILENAME_TEMPLATE} \
   -e HARICA_HTTP_PROXY=${HARICA_HTTP_PROXY} \
   -e HARICA_HTTPS_PROXY=${HARICA_HTTPS_PROXY} \
   -e HARICA_WEBHOOK_URL=${HARICA_WEBHOOK_URL} \

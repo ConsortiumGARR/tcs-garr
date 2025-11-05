@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from functools import wraps
+from pathlib import Path
 
 from colorama import Fore, Style
 
 from tcs_garr.harica_client import HaricaClient
 from tcs_garr.logger import setup_logger
 from tcs_garr.notifications import NotificationManager
-from tcs_garr.utils import HaricaClientConfig
+from tcs_garr.utils import HaricaClientConfig, OutputTemplate
 
 
 def requires_any_role(*roles):
@@ -65,7 +66,7 @@ def requires_all_roles(*roles):
             # Ensure we have a client with valid authentication
             client = self.harica_client
 
-            # Check if the user has all of the required roles (AND logic)
+            # Check if the user has all the required roles (AND logic)
             has_all_required_roles = all(client.has_role(role) for role in roles)
 
             if not has_all_required_roles:
@@ -180,14 +181,8 @@ class BaseCommand(ABC):
             exit(1)
 
     @abstractmethod
-    def execute(self, args):
-        """
-        Execute the command with the parsed arguments.
-
-        Args:
-            args: The parsed command arguments
-        """
-        pass
+    def execute(self):
+        """Execute the command with the parsed arguments."""
 
     def call_webhook(self, cert_type, cn, cert_id=None):
         webhook_url = self._harica_config.webhook_url
@@ -210,3 +205,49 @@ class BaseCommand(ABC):
 
             except Exception as e:
                 self.logger.error(f"Error sending webhook via NotificationManager: {e}")
+
+    def get_output_folder(self):
+        """
+        Retrieve the default output folder from the configuration.
+
+        Returns:
+            str: The output folder path from the configuration.
+        """
+        # Load environment-specific configuration
+        return self.harica_config.output_folder
+
+    def get_output_filepath(self, filename, output_folder: str | None = None, **kwargs: str) -> Path:
+        """
+        Return an absolute filepath for the provided filename, joining it with the output_folder.
+        If output_template option is configured and the provided argument starts with a FQDN, the
+        filename is substituted with a filename/filepath determined by configured template. In all
+        cases the resulting path must be a subfolder of output_folder.
+
+        Args:
+            filename: the output filename.
+            output_folder: the output folder path, if not provided use the configured output_folder.
+            kwargs: additional keyword arguments to provide in case of template substitution.
+        Returns:
+            An `pathlib.Path` object that represents an absolute filepath.
+        """
+        if not isinstance(filename, str) or not (filename := filename.strip()):
+            raise TypeError("1st argument must be a not empty string")
+
+        base_path = Path(output_folder or self.get_output_folder())
+        if not base_path.is_absolute():
+            raise ValueError("Configuration error: output_folder must be an absolute path")
+
+        if len(Path(filename).parts) == 1 and (output_template := self.harica_config.output_template):
+            try:
+                template = OutputTemplate(output_template)
+            except KeyError as err:
+                msg = "Your configuration for 'output_template' is invalid: {}"
+                raise ValueError(msg.format(err))
+            else:
+                filepath = base_path.joinpath(template.get_filepath(filename, **kwargs))
+        else:
+            filepath = base_path.joinpath(filename)
+
+        if not filepath.is_relative_to(base_path):
+            raise ValueError(f"File path {filepath} is not relative to {base_path}")
+        return filepath

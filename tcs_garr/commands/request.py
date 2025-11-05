@@ -78,19 +78,6 @@ class RequestCommand(BaseCommand):
         create_group.add_argument("--cn", help="Common name of the certificate.")
         self.parser.add_argument("--alt_names", default="", help="Comma-separated alternative names (only used with --cn).")
 
-    def get_output_folder(self):
-        """
-        Retrieve the default output folder from the configuration.
-
-        Args:
-            args (argparse.Namespace): The command-line arguments passed to the command.
-
-        Returns:
-            str: The output folder path from the configuration.
-        """
-        # Load environment-specific configuration
-        return self.harica_config.output_folder
-
     def execute(self):
         """
         Executes the command to generate a CSR or request a certificate.
@@ -142,11 +129,11 @@ class RequestCommand(BaseCommand):
 
         if not organizations:
             self.logger.error("No available organization for this domain list")
-            return
+            exit(1)
 
         if len(organizations) > 1:
             self.logger.error("Multiple orgs possible but no selection made (use -O org)")
-            return
+            exit(1)
 
         organization = organizations[0]
 
@@ -158,9 +145,9 @@ class RequestCommand(BaseCommand):
         key = rsa.generate_private_key(public_exponent=65537, key_size=4096, backend=default_backend())
 
         # Write the private key to disk
-        os.makedirs(output_folder, exist_ok=True)
-        key_path = os.path.join(output_folder, f"{cn}.key")
-        with open(key_path, "wb") as f:
+        key_path = self.get_output_filepath(f"{cn}.key", output_folder)
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        with key_path.open("wb") as f:
             f.write(
                 key.private_bytes(
                     encoding=serialization.Encoding.PEM,
@@ -169,7 +156,7 @@ class RequestCommand(BaseCommand):
                 )
             )
         self.logger.info(f"{Fore.BLUE}Private key created in {key_path}{Style.RESET_ALL}")
-        os.chmod(key_path, 0o600)
+        key_path.chmod(0o600)
 
         # Prepare Subject Alternative Names
         subject_alt_names = [cn]
@@ -196,12 +183,12 @@ class RequestCommand(BaseCommand):
         )
 
         # Write the CSR to disk
-        csr_path = os.path.join(output_folder, f"{cn}.csr")
-        with open(csr_path, "wb") as f:
+        csr_path = self.get_output_filepath(f"{cn}.csr", output_folder)
+        with csr_path.open("wb") as f:
             f.write(csr.public_bytes(serialization.Encoding.PEM))
         self.logger.info(f"{Fore.BLUE}CSR created in {csr_path}{Style.RESET_ALL}")
 
-        return csr_path
+        return str(csr_path)
 
     def __issue_certificate(self, csr_file, profile):
         """
