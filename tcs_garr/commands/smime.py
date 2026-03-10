@@ -119,11 +119,11 @@ class RequestCommand(BaseCommand):
                 self.parser.error("--emails takes at most 3 addresses.")
                 exit(1)
             # Generate a CSR and request a certificate
-            csr_path = self.__generate_key_csr(self.args.emails, self.args.gn, self.args.sn, self.harica_config.output_folder)
-            email, p7b_data = self.__issue_bulk_certificate(csr_path, self.args.profile)
+            csr_path = self._generate_key_csr(self.args.emails, self.args.gn, self.args.sn, self.harica_config.output_folder)
+            email, p7b_data = self._issue_bulk_certificate(csr_path, self.args.profile)
         else:
             # CSR has been provided, just issue the certificate
-            email, p7b_data = self.__issue_bulk_certificate(self.args.csr, self.args.profile)
+            email, p7b_data = self._issue_bulk_certificate(self.args.csr, self.args.profile)
 
         # since this API returns the certificate immediately, we do something similar to tcs_garr.commands.download.execute here.
         if self.args.download_type == "pemBundle":
@@ -155,7 +155,7 @@ class RequestCommand(BaseCommand):
         if not self.args.disable_webhook:
             self.call_webhook("S/MIME", email)
 
-    def __generate_key_csr(self, emails, gn, sn, output_folder):
+    def _generate_key_csr(self, emails, gn, sn, output_folder):
         """
         Generates a private key and CSR for the specified common name and alternative names.
 
@@ -227,7 +227,7 @@ class RequestCommand(BaseCommand):
 
         return csr_path
 
-    def __issue_bulk_certificate(self, csr_file, profile):
+    def _issue_bulk_certificate(self, csr_file, profile):
         """
         Issues a certificate request by submitting a CSR to the Harica client.
 

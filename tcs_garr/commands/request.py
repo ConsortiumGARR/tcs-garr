@@ -92,19 +92,19 @@ class RequestCommand(BaseCommand):
 
         if self.args.cn:
             # Generate a CSR and request a certificate
-            csr_path = self.__generate_key_csr(self.args.cn, self.args.alt_names, self.harica_config.output_folder)
-            cn, certificate_id = self.__issue_certificate(csr_path, self.args.profile)
+            csr_path = self._generate_key_csr(self.args.cn, self.args.alt_names, self.harica_config.output_folder)
+            cn, certificate_id = self._issue_certificate(csr_path, self.args.profile)
         else:
             # CSR has been provided, just issue the certificate
-            cn, certificate_id = self.__issue_certificate(self.args.csr, self.args.profile)
+            cn, certificate_id = self._issue_certificate(self.args.csr, self.args.profile)
 
         if self.args.wait:
-            self.__wait_for_certificate_approval(cn, certificate_id)
+            self._wait_for_certificate_approval(cn, certificate_id)
 
         if not self.args.disable_webhook:
             self.call_webhook("TLS", cn, certificate_id)
 
-    def __generate_key_csr(self, cn, alt_names, output_folder):
+    def _generate_key_csr(self, cn, alt_names, output_folder):
         """
         Generates a private key and CSR for the specified common name and alternative names.
 
@@ -190,7 +190,7 @@ class RequestCommand(BaseCommand):
 
         return csr_path
 
-    def __issue_certificate(self, csr_file, profile):
+    def _issue_certificate(self, csr_file, profile):
         """
         Issues a certificate request by submitting a CSR to the Harica client.
 
@@ -247,7 +247,7 @@ class RequestCommand(BaseCommand):
             self.logger.error(f"{Fore.RED}CSR file {csr_file} not found.{Style.RESET_ALL}")
             exit(1)
 
-    def __wait_for_certificate_approval(self, cn, certificate_id):
+    def _wait_for_certificate_approval(self, cn, certificate_id):
         """
         Waits for the certificate to be approved by polling the Harica service.
 

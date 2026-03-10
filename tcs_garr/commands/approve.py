@@ -60,15 +60,15 @@ class ApproveCommand(BaseCommand):
 
         if self.args.id:
             # Approve specific transactions by ID
-            self.__approve_transactions(self.args.id.split(","))
+            self._approve_transactions(self.args.id.split(","))
         elif self.args.all:
             # Approve all pending transactions
-            self.__approve_transactions()
+            self._approve_transactions()
         elif self.args.list_pending:
             # List all pending certificate requests
-            self.__list_pending_certificates()
+            self._list_pending_certificates()
 
-    def __approve_transactions(self, ids=None):
+    def _approve_transactions(self, ids=None):
         """
         Approves transactions by ID or approves all pending transactions.
 
@@ -100,7 +100,7 @@ class ApproveCommand(BaseCommand):
                 # Log error if trying to approve a certificate that the user cannot approve (own request)
                 self.logger.error(f"Failed to approve certificate with ID {id}. You cannot approve your own request.")
 
-    def __list_pending_certificates(self):
+    def _list_pending_certificates(self):
         """
         Lists all pending certificate requests.
 
