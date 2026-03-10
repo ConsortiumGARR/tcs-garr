@@ -210,3 +210,13 @@ class BaseCommand(ABC):
 
             except Exception as e:
                 self.logger.error(f"Error sending webhook via NotificationManager: {e}")
+
+    def get_output_folder(self):
+        """
+        Retrieve the default output folder from the configuration.
+
+        Returns:
+            str: The output folder path from the configuration.
+        """
+        # Load environment-specific configuration
+        return self.harica_config.output_folder

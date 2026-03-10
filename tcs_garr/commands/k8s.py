@@ -52,16 +52,6 @@ class K8sCommand(BaseCommand):
             help="Name for the yaml file without the extension (optional).",
         )
 
-    def get_output_folder(self):
-        """
-        Retrieve the default output folder from the configuration.
-
-        Returns:
-            str: The output folder path from the configuration.
-        """
-        # Load environment-specific configuration to get the output folder
-        return self.harica_config.output_folder
-
     def execute(self):
         """
         Executes the command to generate a Kubernetes TLS secret YAML file.

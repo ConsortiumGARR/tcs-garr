@@ -102,19 +102,6 @@ class RequestCommand(BaseCommand):
             help="Type of download: 'pemBundle' or 'certificate'. Default is 'pemBundle'.",
         )
 
-    def get_output_folder(self):
-        """
-        Retrieve the default output folder from the configuration.
-
-        Args:
-            args (argparse.Namespace): The command-line arguments passed to the command.
-
-        Returns:
-            str: The output folder path from the configuration.
-        """
-        # Load environment-specific configuration
-        return self.harica_config.output_folder
-
     def execute(self):
         """
         Executes the command to generate a CSR or request a certificate and download it.
