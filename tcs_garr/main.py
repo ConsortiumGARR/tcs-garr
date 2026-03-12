@@ -68,16 +68,17 @@ def get_arguments_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] = None):
+def main(args=None):
     """
     Main function to handle command line arguments and initiate the certificate issuance or listing process.
 
-    :param argv: Command line arguments.
+    Args:
+        args (ist of str): CLI arguments provided for testing purposes. For default argparse use sys.argv[1:].
     """
     parser = get_arguments_parser()
 
     # Parse know arguments and read/load the configuration once
-    args, _ = parser.parse_known_args()
+    args, _ = parser.parse_known_args(args=args)
     harica_config = HaricaClientConfig(
         environment=args.environment,
         alt_config_path=args.config,
@@ -93,11 +94,8 @@ def main(argv: list[str] = None):
         # Let the command instance configure its parser
         cmd_instance.configure_parser(command_parser)
 
-    # Parse arguments
-    args = parser.parse_args()
-
-    # Now, pass the args to command discovery and update command instances
-    command_instances = discover_commands(args, harica_config)
+    # Update parsed arguments instance using all CLI arguments
+    parser.parse_args(namespace=args)
 
     # Check for new release unless --no-check-release is specified
     if not args.no_check_release:
