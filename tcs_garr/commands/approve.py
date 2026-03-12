@@ -18,14 +18,14 @@ class ApproveCommand(BaseCommand):
 
     REQUIRED_ROLE = UserRole.SSL_ENTERPRISE_APPROVER
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the ApproveCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "approve"
         self.help_text = "Approve a certificate by ID"
 

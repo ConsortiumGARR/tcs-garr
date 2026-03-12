@@ -34,14 +34,14 @@ class RequestCommand(BaseCommand):
     HARICA_BULK_EMAIL_LIMIT = 100
     REQUIRED_ROLE = UserRole.ENTERPRISE_ADMIN
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the RequestCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "smime"
         self.help_text = "Request a new S/MIME certificate"
         self.parser = None

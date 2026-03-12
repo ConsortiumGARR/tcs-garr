@@ -26,8 +26,8 @@ class DownloadCommand(BaseCommand):
 
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, args, harica_config):
+        super().__init__(args, harica_config)
         self.command_name = "download"
         self.help_text = "Download a certificate by ID"
 

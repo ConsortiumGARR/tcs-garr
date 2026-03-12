@@ -14,7 +14,7 @@ class WhoamiCommand(BaseCommand):
 
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initialize the WhoamiCommand class.
 
@@ -22,7 +22,7 @@ class WhoamiCommand(BaseCommand):
         The command name is "whoami", and it will be used to get the current
         user's profile when executed.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "whoami"  # Set the command name to "whoami"
         self.help_text = "Get logged in user profile"  # Help text for the command
 

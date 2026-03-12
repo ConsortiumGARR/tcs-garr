@@ -9,12 +9,12 @@ from packaging import version
 
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.logger import setup_logger
-from tcs_garr.utils import check_pypi_version, get_current_version
+from tcs_garr.utils import check_pypi_version, get_current_version, HaricaClientConfig
 
 logger = setup_logger()
 
 
-def discover_commands(args):
+def discover_commands(args: argparse.Namespace, harica_config: HaricaClientConfig):
     command_classes = {}
     package = "tcs_garr"
     package_dir = os.path.join(os.path.dirname(__file__), "commands")
@@ -28,17 +28,15 @@ def discover_commands(args):
             for item_name, item in module.__dict__.items():
                 if inspect.isclass(item) and issubclass(item, BaseCommand) and item is not BaseCommand:
                     # Create an instance of the command class
-                    cmd_instance = item(args)
+                    cmd_instance = item(args, harica_config)
                     cmd_name = cmd_instance.command_name or item.__name__.replace("Command", "").lower()
                     command_classes[cmd_name] = cmd_instance
 
     return command_classes
 
 
-def main():
-    """
-    Main function to handle command line arguments and initiate the certificate issuance or listing process.
-    """
+def get_arguments_parser() -> argparse.ArgumentParser:
+    """Create argument parser for CLI application."""
     parser = argparse.ArgumentParser(description="Harica Certificate Manager")
 
     parser.add_argument("--debug", action="store_true", default=False, help="Enable DEBUG logging.")
@@ -52,15 +50,12 @@ def main():
         action="store_true",
         help="Skip checking for a new release",
     )
-    subparser = parser.add_subparsers(dest="command", help="Available commands")
-
     parser.add_argument(
         "--environment",
         choices=["production", "stg"],
         default="production",
         help="Specify the environment to use (default: production)",
     )
-
     parser.add_argument(
         "-c",
         "--config",
@@ -70,13 +65,31 @@ def main():
             "default path and will not use environment variables)"
         ),
     )
+    return parser
 
-    # Dynamically load commands
-    command_instances = discover_commands(None)
+
+def main(argv: list[str] = None):
+    """
+    Main function to handle command line arguments and initiate the certificate issuance or listing process.
+
+    :param argv: Command line arguments.
+    """
+    parser = get_arguments_parser()
+
+    # Parse know arguments and read/load the configuration once
+    args, _ = parser.parse_known_args()
+    harica_config = HaricaClientConfig(
+        environment=args.environment,
+        alt_config_path=args.config,
+    )
+
+    # Add subparsers and dynamically load commands
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    command_instances = discover_commands(args, harica_config)
 
     for cmd_name, cmd_instance in command_instances.items():
         # Create a subparser for this command
-        command_parser = subparser.add_parser(cmd_name, help=cmd_instance.help_text)
+        command_parser = subparsers.add_parser(cmd_name, help=cmd_instance.help_text)
         # Let the command instance configure its parser
         cmd_instance.configure_parser(command_parser)
 
@@ -84,7 +97,7 @@ def main():
     args = parser.parse_args()
 
     # Now, pass the args to command discovery and update command instances
-    command_instances = discover_commands(args)
+    command_instances = discover_commands(args, harica_config)
 
     # Check for new release unless --no-check-release is specified
     if not args.no_check_release:

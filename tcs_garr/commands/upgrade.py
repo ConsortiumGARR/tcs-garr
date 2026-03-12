@@ -13,7 +13,7 @@ class UpgradeCommand(BaseCommand):
     the application is upgraded automatically.
     """
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initialize the UpgradeCommand class.
 
@@ -21,7 +21,7 @@ class UpgradeCommand(BaseCommand):
         The command name is "upgrade", and it is used to upgrade the current
         application to the latest version available on PyPI.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "upgrade"  # Set the command name to "upgrade"
         self.help_text = "Self-upgrade command for the app."  # Help text for the command
 

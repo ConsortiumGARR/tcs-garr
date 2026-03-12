@@ -16,8 +16,8 @@ class AcmeAccountsCommand(BaseCommand):
 
     REQUIRED_ROLE = UserRole.ENTERPRISE_ADMIN
 
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, args, harica_config):
+        super().__init__(args, harica_config)
         self.command_name = "acme"
         self.help_text = "List ACME accounts configured in Harica"
 

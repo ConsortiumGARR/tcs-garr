@@ -24,7 +24,7 @@ class ListCertificatesCommand(BaseCommand):
 
     REQUIRED_ROLE = UserRole.USER  # Base requirement for the whole command
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initialize the ListCertificates class.
 
@@ -32,7 +32,7 @@ class ListCertificatesCommand(BaseCommand):
         The command name is "list", and it is used to generate reports about
         certificates. The `help_text` provides a brief description of the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "list"  # Set the command name to "list"
         self.help_text = "List and filter certificates"  # Help text for the command
 

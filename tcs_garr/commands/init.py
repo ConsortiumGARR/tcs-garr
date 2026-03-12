@@ -20,14 +20,14 @@ class InitCommand(BaseCommand):
         args (argparse.Namespace): The command-line arguments passed to the command.
     """
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the InitCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "init"
         self.help_text = "Generate Harica config file"
 

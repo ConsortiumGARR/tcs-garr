@@ -31,14 +31,14 @@ class RequestCommand(BaseCommand):
     HARICA_SAN_LIMIT = 100
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the RequestCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "request"
         self.help_text = "Request a new certificate"
         self.parser = None

@@ -12,14 +12,14 @@ class CancelCommand(BaseCommand):
 
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the CancelCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "cancel"
         self.help_text = "Cancel a request by ID"
 

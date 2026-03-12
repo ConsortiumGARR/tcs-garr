@@ -14,14 +14,14 @@ class K8sCommand(BaseCommand):
         args (argparse.Namespace): The command-line arguments passed to the command.
     """
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the K8sCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "k8s"
         self.help_text = "Generate Kubernetes TLS resource file"
 
