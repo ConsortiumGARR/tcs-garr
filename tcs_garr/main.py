@@ -37,7 +37,7 @@ def discover_commands(args: argparse.Namespace, harica_config: HaricaClientConfi
 
 def get_arguments_parser() -> argparse.ArgumentParser:
     """Create argument parser for CLI application."""
-    parser = argparse.ArgumentParser(description="Harica Certificate Manager")
+    parser = argparse.ArgumentParser(prog="tcs-garr", description="Harica Certificate Manager")
 
     parser.add_argument("--debug", action="store_true", default=False, help="Enable DEBUG logging.")
     parser.add_argument(
@@ -96,6 +96,13 @@ def main(args=None):
 
     # Update parsed arguments instance using all CLI arguments
     parser.parse_args(namespace=args)
+
+    if args.command != "init":
+        # Check configuration only if the invoked command is not 'init'
+        try:
+            harica_config.validate_config()
+        except (OSError, TypeError, ValueError):
+            exit(1)
 
     # Check for new release unless --no-check-release is specified
     if not args.no_check_release:
