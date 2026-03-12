@@ -12,6 +12,7 @@ class K8sCommand(BaseCommand):
 
     Args:
         args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     def __init__(self, args, harica_config):

@@ -11,6 +11,10 @@ class UpgradeCommand(BaseCommand):
     This command checks the current version of the application and compares it
     to the latest version available on PyPI. If a newer version is available,
     the application is upgraded automatically.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     def __init__(self, args, harica_config):
@@ -44,9 +48,6 @@ class UpgradeCommand(BaseCommand):
         This method checks the current version of the application and compares it
         to the latest version available on PyPI. If a newer version is available,
         it performs the upgrade process and logs the result.
-
-        Args:
-            args: Parsed command-line arguments (not used for this command).
         """
         # Get the current version of the application
         current_version = get_current_version()

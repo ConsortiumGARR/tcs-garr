@@ -112,7 +112,13 @@ def requires_roles(*roles, logic="OR"):
 
 
 class BaseCommand(ABC):
-    """Base class that all command implementations should inherit from."""
+    """
+    Base class that all command implementations should inherit from.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
+    """
 
     REQUIRED_ROLE = None
 
@@ -168,14 +174,10 @@ class BaseCommand(ABC):
             exit(1)
 
     @abstractmethod
-    def execute(self, args):
+    def execute(self):
         """
-        Execute the command with the parsed arguments.
-
-        Args:
-            args: The parsed command arguments
+        Execute the command instance with its arguments and configuration. Must be implemented by subclasses.
         """
-        pass
 
     def call_webhook(self, cert_type, cn, cert_id=None):
         webhook_url = self.harica_config.webhook_url

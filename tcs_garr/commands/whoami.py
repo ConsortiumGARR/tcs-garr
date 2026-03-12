@@ -10,6 +10,10 @@ class WhoamiCommand(BaseCommand):
 
     This command interacts with the Harica API to retrieve the profile details
     of the user who is currently authenticated.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.USER
@@ -45,9 +49,6 @@ class WhoamiCommand(BaseCommand):
         This method makes a call to the Harica client to fetch the current user's
         profile, including their full name and email address. It logs this
         information to the console in a formatted, colorized output.
-
-        Args:
-            args: Parsed command-line arguments (not used for this command).
         """
 
         # Log the user's full name and email in green-colored output

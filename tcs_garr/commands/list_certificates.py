@@ -20,6 +20,10 @@ class ListCertificatesCommand(BaseCommand):
     expiration criteria provided by the user, such as certificates that have
     expired since a certain number of days or certificates expiring in the
     next few days.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.USER  # Base requirement for the whole command

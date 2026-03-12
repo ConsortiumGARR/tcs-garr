@@ -17,6 +17,7 @@ class DomainsCommand(BaseCommand):
 
     Args:
         args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.ENTERPRISE_ADMIN
