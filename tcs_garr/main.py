@@ -6,6 +6,7 @@ import inspect
 import os
 import pkgutil
 from packaging import version
+from typing import Optional
 
 from tcs_garr.commands.base import BaseCommand
 from tcs_garr.logger import setup_logger
@@ -14,8 +15,15 @@ from tcs_garr.utils import check_pypi_version, get_current_version, HaricaClient
 logger = setup_logger()
 
 
-def discover_commands(args: argparse.Namespace, harica_config: HaricaClientConfig):
-    command_classes = {}
+def discover_commands(args: argparse.Namespace, harica_config: HaricaClientConfig) -> dict[str, BaseCommand]:
+    """
+    Returns a dictionary with instances of discovered commands.
+
+    Args:
+        args (Namespace): CLI arguments provided for testing purposes. It could be initially empty.
+        harica_config (HaricaClientConfig): Harica client configuration to initialize the harica client.
+    """
+    command_instances = {}
     package = "tcs_garr"
     package_dir = os.path.join(os.path.dirname(__file__), "commands")
 
@@ -30,14 +38,19 @@ def discover_commands(args: argparse.Namespace, harica_config: HaricaClientConfi
                     # Create an instance of the command class
                     cmd_instance = item(args, harica_config)
                     cmd_name = cmd_instance.command_name or item.__name__.replace("Command", "").lower()
-                    command_classes[cmd_name] = cmd_instance
+                    command_instances[cmd_name] = cmd_instance
 
-    return command_classes
+    return command_instances
 
 
-def get_arguments_parser() -> argparse.ArgumentParser:
-    """Create argument parser for CLI application."""
-    parser = argparse.ArgumentParser(prog="tcs-garr", description="Harica Certificate Manager")
+def get_arguments_parser(commands: Optional[dict[str, BaseCommand]] = None) -> argparse.ArgumentParser:
+    """
+    Create argument parser for CLI application.
+
+    Args:
+        commands: Add subparsers for command instances. Defaults to None.
+    """
+    parser = argparse.ArgumentParser(prog="tcs-garr", add_help=bool(commands), description="Harica Certificate Manager")
 
     parser.add_argument("--debug", action="store_true", default=False, help="Enable DEBUG logging.")
     parser.add_argument(
@@ -50,6 +63,14 @@ def get_arguments_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip checking for a new release",
     )
+    if commands:
+        subparsers = parser.add_subparsers(dest="command", help="Available commands")
+        for cmd_name, cmd_instance in commands.items():
+            # Create a subparser for this command
+            command_parser = subparsers.add_parser(cmd_name, help=cmd_instance.help_text)
+            # Let the command instance configure its parser
+            cmd_instance.configure_parser(command_parser)
+
     parser.add_argument(
         "--environment",
         choices=["production", "stg"],
@@ -68,33 +89,25 @@ def get_arguments_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(args=None):
+def main(argv: Optional[list[str]] = None):
     """
     Main function to handle command line arguments and initiate the certificate issuance or listing process.
 
     Args:
-        args (ist of str): CLI arguments provided for testing purposes. For default argparse use sys.argv[1:].
+        argv (optional list of str): arguments provided for non CLI usage. For default argparse use sys.argv[1:].
     """
-    parser = get_arguments_parser()
-
-    # Parse know arguments and read/load the configuration once
-    args, _ = parser.parse_known_args(args=args)
+    # Parse known arguments in order to load configuration by --config option, if any.
+    args, unknown = get_arguments_parser().parse_known_args(args=argv)
     harica_config = HaricaClientConfig(
         environment=args.environment,
         alt_config_path=args.config,
     )
 
-    # Add subparsers and dynamically load commands
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    command_instances = discover_commands(args, harica_config)
+    # Dynamically load commands and get the full argument parser
+    commands_instances = discover_commands(args, harica_config)
+    parser = get_arguments_parser(commands=commands_instances)
 
-    for cmd_name, cmd_instance in command_instances.items():
-        # Create a subparser for this command
-        command_parser = subparsers.add_parser(cmd_name, help=cmd_instance.help_text)
-        # Let the command instance configure its parser
-        cmd_instance.configure_parser(command_parser)
-
-    # Update parsed arguments instance using all CLI arguments
+    # Parse the arguments updating args instance using all CLI arguments
     parser.parse_args(namespace=args)
 
     if args.command != "init":
@@ -117,8 +130,8 @@ def main(args=None):
             logger.info(f"New version available: {latest_version}. Please consider updating with command tcs-garr upgrade.")
 
     # Execute the selected command
-    if args.command in command_instances:
-        command_instance = command_instances[args.command]
+    if args.command in commands_instances:
+        command_instance = commands_instances[args.command]
         command_instance.execute()
     else:
         parser.print_help()
