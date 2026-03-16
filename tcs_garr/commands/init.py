@@ -89,6 +89,7 @@ class InitCommand(BaseCommand):
             "https_proxy": "",
             "webhook_url": "",
             "webhook_type": settings.WEBHOOK_TYPE,
+            "user_commands": "",
         }
 
         # Check if the configuration file already exists
@@ -199,6 +200,14 @@ class InitCommand(BaseCommand):
             else:
                 print(f"{Fore.RED}❌ Invalid webhook type. Must be 'slack' or 'generic'.{Style.RESET_ALL}")
 
+        # Prompt for output folder with existing value in brackets if force with existing config
+        user_commands_prompt = f"{Fore.GREEN}📂 Enter user_commands package folder"
+        if force and has_existing_config and existing_values["user_commands"]:
+            user_commands_prompt += f" [{existing_values['user_commands']}]"
+        user_commands = input(f"{user_commands_prompt}: {Style.RESET_ALL}") or (
+            existing_values["user_commands"] if force and has_existing_config else ""
+        )
+
         # Update the configuration with the user inputs
         config[section_name] = {
             "username": username,
@@ -216,6 +225,8 @@ class InitCommand(BaseCommand):
             config[section_name]["webhook_url"] = webhook_url
         if webhook_type:
             config[section_name]["webhook_type"] = webhook_type
+        if user_commands:
+            config[section_name]["user_commands"] = user_commands
 
         # Write the configuration to the file
         with open(settings.CONFIG_PATH, "w") as configfile:

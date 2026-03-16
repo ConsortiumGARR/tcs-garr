@@ -70,6 +70,7 @@ class HaricaClientConfig:
         self.https_proxy = None
         self.webhook_url = None
         self.webhook_type = None
+        self.user_commands = None
 
         # Load configuration
         self._load_config(environment, alt_config_path)
@@ -112,6 +113,7 @@ class HaricaClientConfig:
                         "https_proxy": config.get(section_name, "https_proxy", fallback=None),
                         "webhook_url": config.get(section_name, "webhook_url", fallback=None),
                         "webhook_type": config.get(section_name, "webhook_type", fallback=settings.WEBHOOK_TYPE),
+                        "user_commands": config.get(section_name, "user_commands", fallback=None),
                     }
                     # Found config, no need to check further
                     break
@@ -139,6 +141,7 @@ class HaricaClientConfig:
                 "https_proxy": os.getenv("HARICA_HTTPS_PROXY") or os.getenv("HTTPS_PROXY"),
                 "webhook_url": os.getenv("HARICA_WEBHOOK_URL") or os.getenv("WEBHOOK_URL"),
                 "webhook_type": os.getenv("HARICA_WEBHOOK_TYPE") or os.getenv("WEBHOOK_TYPE"),
+                "user_commands": None,  # Config only, don't want to import extra code by env settings.
             }
 
         # Set object attributes from config_data, check later against the provided ergs.
@@ -150,6 +153,7 @@ class HaricaClientConfig:
         self.https_proxy = config_data["https_proxy"]
         self.webhook_url = config_data["webhook_url"]
         self.webhook_type = config_data["webhook_type"]
+        self.user_commands = config_data["user_commands"]
 
     def as_dict(self):
         return self.__dict__.copy()

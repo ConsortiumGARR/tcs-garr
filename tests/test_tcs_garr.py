@@ -1,6 +1,7 @@
 import unittest
 import io
 import pathlib
+import tempfile
 from unittest.mock import patch
 from contextlib import redirect_stdout, redirect_stderr
 
@@ -51,6 +52,23 @@ class TestCommandLineInterface(unittest.TestCase):
 
         _, err = self.exec_main(argv=["--environment", "foo"], exc=SystemExit)
         self.assertIn("--environment: invalid choice: 'foo'", err)
+
+    def test_user_commands(self):
+        package_dir = self.TEST_CONFIG_FILE.parent.parent / "tcs_garr_userspace"
+
+        with tempfile.NamedTemporaryFile() as tf:
+            with pathlib.Path(self.TEST_CONFIG_FILE).open("r") as fp:
+                config = fp.read() + f"\nuser_commands = {package_dir}"
+
+            tf.write(config.encode())
+            tf.flush()
+
+            with self.assertLogs(logger=logger, level="ERROR") as cm:
+                out, err = self.exec_main(argv=["--help", "--config", tf.name])
+                self.assertIn("Dummy user command", out)
+                self.assertEqual(err, "")
+                self.assertEqual(len(cm.output), 1)
+                self.assertIn("Invalid command 'whoami' override", cm.output[0])
 
 
 if __name__ == "__main__":

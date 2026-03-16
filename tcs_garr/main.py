@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-
+import sys
 import argparse
 import importlib
 import inspect
 import os
+import pathlib
 import pkgutil
 from packaging import version
 from typing import Optional
@@ -38,6 +39,41 @@ def discover_commands(args: argparse.Namespace, harica_config: HaricaClientConfi
                     # Create an instance of the command class
                     cmd_instance = item(args, harica_config)
                     cmd_name = cmd_instance.command_name or item.__name__.replace("Command", "").lower()
+                    command_instances[cmd_name] = cmd_instance
+
+    if harica_config.user_commands:
+        # Load user defined commands from a local package directory
+        package_dir = pathlib.Path(harica_config.user_commands)
+        if not package_dir.is_dir():
+            logger.error(f"Extra commands directory not found at {package_dir}")
+            return command_instances
+
+        modules = []
+        for m_info in pkgutil.iter_modules([package_dir]):
+            if not m_info.ispkg and not m_info.name.startswith("_") and m_info.name not in ("base", "main", "utils"):
+                modules.append(m_info.name)
+
+        if not modules:
+            logger.error(f"Extra modules not found at {package_dir}")
+        elif str(package_dir.parent) not in sys.path:
+            sys.path.append(str(package_dir.parent))
+
+        for name in modules:
+            module = importlib.import_module(f"{package_dir.name}.{name}")
+
+            for item_name, item in module.__dict__.items():
+                if inspect.isclass(item) and issubclass(item, BaseCommand):
+                    if item is BaseCommand:
+                        continue
+
+                    # Create an instance of the command class
+                    cmd_instance = item(args, harica_config)
+                    cmd_name = cmd_instance.command_name or item.__name__.replace("Command", "").lower()
+
+                    if cmd_name in command_instances and not isinstance(cmd_instance, command_instances[cmd_name].__class__):
+                        logger.error(f"Invalid command {cmd_name!r} override from {module!r}!")
+                        continue
+
                     command_instances[cmd_name] = cmd_instance
 
     return command_instances
