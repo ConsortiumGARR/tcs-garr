@@ -1,3 +1,21 @@
+## 0.26.0 (2026-07-29)
+
+### Feat
+
+- **config**: Load config at first stage
+
+### Fix
+
+- correct argv handling and configuration error reporting
+- **main**: fix help display rebuilding argument parser
+- **main**: remove redundant reload of commands
+
+### Refactor
+
+- **config**: post validation of HaricaClientConfig
+- **commands**: change private methods to protected
+- **commands**: add get_output_folder() to BaseCommand
+
 ## 0.25.1 (2025-09-29)
 
 ## 0.25.1-rc.1 (2025-09-29)
