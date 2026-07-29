@@ -548,6 +548,71 @@ tcs-garr --environment stg init
    to send data with the request in JSON format. Finally, you can use the `--foutput`
    option to save the JSON response to a file.
 
+## 🐍 Usage from Python
+
+Commands receive their configuration from the caller, so they can be run from a Python
+script without going through a shell. These are internal interfaces: they are not
+covered by any stability guarantee and may change between releases.
+
+### Running a command
+
+`main()` accepts the argument list that the CLI would receive, so any command can be
+invoked programmatically. Global options must come before the command name, exactly as
+on the command line.
+
+```python
+from tcs_garr.main import main
+
+main(["--config", "/path/to/tcs-garr.conf", "--no-check-release", "whoami"])
+```
+
+### Building a command with an explicit configuration
+
+A command takes the parsed arguments and a `HaricaClientConfig` instance. This makes it
+possible to choose the configuration source and to reuse a command without a config
+file, for example by filling the fields in memory.
+
+```python
+import argparse
+
+from tcs_garr.commands.download import DownloadCommand
+from tcs_garr.utils import HaricaClientConfig
+
+config = HaricaClientConfig(alt_config_path="/path/to/tcs-garr.conf")
+config.validate_config()
+
+args = argparse.Namespace(
+    environment="production",
+    config=None,
+    id="12345",
+    output_filename=None,
+    force=False,
+    download_type="pemBundle",
+)
+DownloadCommand(args, config).execute()
+```
+
+`HaricaClientConfig` reports a missing or unusable configuration file through its
+`load_error` attribute, and `validate_config()` raises on invalid values, so importing
+the package never terminates the calling script.
+
+### Customizing a command
+
+Commands can be subclassed to adapt their behaviour, for instance to install the
+issued certificates in a local service.
+
+```python
+from tcs_garr.commands.download import DownloadCommand
+
+
+class MyDownloadCommand(DownloadCommand):
+    def get_output_folder(self):
+        return "/srv/certs"
+```
+
+For direct access to the Harica endpoints, without the command layer, use
+`tcs_garr.harica_client.HaricaClient`.
+
 ## 🐳 Docker
 
 Docker image is available at GitHub container

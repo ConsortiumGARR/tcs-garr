@@ -53,26 +53,40 @@ class HaricaClientConfig:
     Loads configuration from files or environment variables.
     """
 
-    def __init__(self, environment="production", alt_config_path=None):
+    CONFIG_FIELDS = (
+        "username",
+        "password",
+        "totp_seed",
+        "output_folder",
+        "http_proxy",
+        "https_proxy",
+        "webhook_url",
+        "webhook_type",
+    )
+
+    def __init__(self, environment="production", alt_config_path=None, load=True):
         """
         Initialize the HaricaClientConfig by loading configuration for the specified environment.
 
         Args:
             environment (str): The environment to load configuration for. Defaults to "production".
             alt_config_path (str): An optional path to an alternative configuration file.
+            load (bool): Read the configuration sources. Set to False to get an empty configuration.
         """
         # Set default values
-        self.username = None
-        self.password = None
-        self.totp_seed = None
-        self.output_folder = None
-        self.http_proxy = None
-        self.https_proxy = None
-        self.webhook_url = None
-        self.webhook_type = None
+        for name in self.CONFIG_FIELDS:
+            setattr(self, name, None)
+
+        # Error occurred while loading, if any. Kept instead of raised because the
+        # 'init' command has to run without a valid configuration in order to create one.
+        self.load_error = None
 
         # Load configuration
-        self._load_config(environment, alt_config_path)
+        if load:
+            try:
+                self._load_config(environment, alt_config_path)
+            except OSError as err:
+                self.load_error = err
 
     def _load_config(self, environment="production", alt_config_path=None):
         """
@@ -116,20 +130,16 @@ class HaricaClientConfig:
                     # Found config, no need to check further
                     break
                 else:
-                    error_msg = f"No configuration found for environment '{environment}' in {path}"
-                    logger.error(f"❌ {error_msg}")
-                    raise OSError(error_msg)
+                    raise OSError(f"No configuration found for environment '{environment}' in {path}")
 
         # No fallback to env variables if alt_config_path is provided and config file is
         # not found
         if not config_data and alt_config_path:
-            error_msg = f"Alternative config file '{alt_config_path}' not found."
-            logger.error(f"❌ {error_msg}")
-            raise OSError(error_msg)
+            raise OSError(f"Alternative config file '{alt_config_path}' not found.")
 
         # Fallback to env variables if no config file
         if config_data is None:
-            logger.info("\u26a0 No config file found. Falling back to environment variables.")
+            logger.info("⚠️ No config file found. Falling back to environment variables.")
             config_data = {
                 "username": os.getenv("HARICA_USERNAME"),
                 "password": os.getenv("HARICA_PASSWORD"),
@@ -141,22 +151,17 @@ class HaricaClientConfig:
                 "webhook_type": os.getenv("HARICA_WEBHOOK_TYPE") or os.getenv("WEBHOOK_TYPE"),
             }
 
-        # Set object attributes from config_data, check later against the provided ergs.
-        self.username = config_data["username"]
-        self.password = config_data["password"]
-        self.totp_seed = config_data["totp_seed"]
-        self.output_folder = config_data["output_folder"]
-        self.http_proxy = config_data["http_proxy"]
-        self.https_proxy = config_data["https_proxy"]
-        self.webhook_url = config_data["webhook_url"]
-        self.webhook_type = config_data["webhook_type"]
+        # Set object attributes from config_data, checked later by validate_config().
+        for name in self.CONFIG_FIELDS:
+            setattr(self, name, config_data[name])
 
     def as_dict(self):
-        return self.__dict__.copy()
+        """Return the configuration values, without the loading state."""
+        return {name: getattr(self, name) for name in self.CONFIG_FIELDS}
 
     def validate_config(self, config_data=None):
         """
-        Validate the configuration data.
+        Validate the configuration data. Raises an exception on the first error found.
 
         Args:
             config_data (dict): Configuration data to validate. If not provided validate instance.
@@ -169,22 +174,18 @@ class HaricaClientConfig:
             k for k in ("username", "password", "output_folder") if not (v := config_data.get(k)) or not isinstance(v, str)
         ]
         if missing_fields:
-            error_msg = (
+            raise TypeError(
                 "Configuration file or environment variables missing for "
                 f"configuration fields {', '.join(missing_fields)}. \n"
                 "Generate config file with 'tcs-garr init' command or set "
                 "HARICA_USERNAME and HARICA_PASSWORD environment variables."
             )
-            logger.error(f"❌ {error_msg}")
-            raise TypeError(error_msg)
 
         # Validate email
+        username = config_data["username"]
         pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
-        valid = re.match(pattern, self.username)
-        if not valid:
-            error_msg = f"Invalid email format for username: {self.username}"
-            logger.error(f"❌ {error_msg}")
-            raise ValueError(error_msg)
+        if not re.match(pattern, username):
+            raise ValueError(f"Invalid email format for username: {username}")
 
         # Validate TOTP seed if provided
         totp_seed = config_data["totp_seed"]
@@ -192,9 +193,7 @@ class HaricaClientConfig:
             try:
                 generate_otp(totp_seed)
             except ValueError:
-                error_msg = f"Invalid TOTP seed: {totp_seed}"
-                logger.error(f"❌ {error_msg}")
-                raise ValueError(error_msg)
+                raise ValueError(f"Invalid TOTP seed: {totp_seed}")
 
 
 def generate_otp(totp_seed):

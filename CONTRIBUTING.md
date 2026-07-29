@@ -14,6 +14,7 @@ Thank you for considering contributing to TCS-GARR Client! We're excited to have
     - [Prerequisites](#prerequisites)
     - [Installing Poetry](#installing-poetry)
     - [Installing Dependencies](#installing-dependencies)
+  - [Running Tests](#running-tests)
   - [Style Guide](#style-guide)
   - [Pre-Commit Hooks](#pre-commit-hooks)
   - [Handling Pull Requests from GitHub](#handling-pull-requests-from-github)
@@ -104,6 +105,19 @@ curl -sSL https://install.python-poetry.org | python3 -
     ```sh
     tcs-garr --help
     ```
+
+## Running Tests
+
+Tests live in the `tests/` directory and use the standard library `unittest` module, so
+no additional dependency is required:
+
+```sh
+python -m unittest discover -s tests
+```
+
+The CLI tests call `tcs_garr.main.main()` with an explicit argument list and a
+dedicated configuration file, `tests/data/test-tcs-garr.conf`. Command execution is
+mocked, so the suite never contacts Harica nor PyPI.
 
 ## Style Guide
 

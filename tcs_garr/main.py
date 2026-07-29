@@ -98,9 +98,12 @@ def main(argv: Optional[list[str]] = None):
     """
     # Parse known arguments in order to load configuration by --config option, if any.
     args, unknown = get_arguments_parser().parse_known_args(args=argv)
+    help_requested = "-h" in unknown or "--help" in unknown
+
     harica_config = HaricaClientConfig(
         environment=args.environment,
         alt_config_path=args.config,
+        load=not help_requested,
     )
 
     # Dynamically load commands and get the full argument parser
@@ -108,13 +111,19 @@ def main(argv: Optional[list[str]] = None):
     parser = get_arguments_parser(commands=commands_instances)
 
     # Parse the arguments updating args instance using all CLI arguments
-    parser.parse_args(namespace=args)
+    parser.parse_args(args=argv, namespace=args)
 
     if args.command != "init":
-        # Check configuration only if the invoked command is not 'init'
+        # The 'init' command creates the configuration, so it's the only one that can
+        # run without it. Mandatory values are checked only if a command has to run,
+        # otherwise a bare invocation would fail instead of printing the help message.
         try:
-            harica_config.validate_config()
-        except (OSError, TypeError, ValueError):
+            if harica_config.load_error is not None:
+                raise harica_config.load_error
+            if args.command is not None:
+                harica_config.validate_config()
+        except (OSError, TypeError, ValueError) as err:
+            logger.error(f"❌ {err}")
             exit(1)
 
     # Check for new release unless --no-check-release is specified
