@@ -17,18 +17,19 @@ class DomainsCommand(BaseCommand):
 
     Args:
         args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.ENTERPRISE_ADMIN
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the DomainsCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "domains"
         self.help_text = "List available domains"
 

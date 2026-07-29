@@ -10,11 +10,15 @@ class WhoamiCommand(BaseCommand):
 
     This command interacts with the Harica API to retrieve the profile details
     of the user who is currently authenticated.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initialize the WhoamiCommand class.
 
@@ -22,7 +26,7 @@ class WhoamiCommand(BaseCommand):
         The command name is "whoami", and it will be used to get the current
         user's profile when executed.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "whoami"  # Set the command name to "whoami"
         self.help_text = "Get logged in user profile"  # Help text for the command
 
@@ -45,9 +49,6 @@ class WhoamiCommand(BaseCommand):
         This method makes a call to the Harica client to fetch the current user's
         profile, including their full name and email address. It logs this
         information to the console in a formatted, colorized output.
-
-        Args:
-            args: Parsed command-line arguments (not used for this command).
         """
 
         # Log the user's full name and email in green-colored output

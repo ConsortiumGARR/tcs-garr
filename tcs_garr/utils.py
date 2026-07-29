@@ -116,18 +116,20 @@ class HaricaClientConfig:
                     # Found config, no need to check further
                     break
                 else:
-                    logger.error(f"No configuration found for environment '{environment}' in {path}")
-                    exit(1)
+                    error_msg = f"No configuration found for environment '{environment}' in {path}"
+                    logger.error(f"❌ {error_msg}")
+                    raise OSError(error_msg)
 
         # No fallback to env variables if alt_config_path is provided and config file is
         # not found
         if not config_data and alt_config_path:
-            logger.error(f"Alternative config file '{alt_config_path}' not found.")
-            exit(1)
+            error_msg = f"Alternative config file '{alt_config_path}' not found."
+            logger.error(f"❌ {error_msg}")
+            raise OSError(error_msg)
 
         # Fallback to env variables if no config file
         if config_data is None:
-            logger.info("No config file found. Falling back to environment variables.")
+            logger.info("\u26a0 No config file found. Falling back to environment variables.")
             config_data = {
                 "username": os.getenv("HARICA_USERNAME"),
                 "password": os.getenv("HARICA_PASSWORD"),
@@ -139,19 +141,7 @@ class HaricaClientConfig:
                 "webhook_type": os.getenv("HARICA_WEBHOOK_TYPE") or os.getenv("WEBHOOK_TYPE"),
             }
 
-            # Ensure all required environment variables are set
-            if not all([config_data["username"], config_data["password"]]):
-                logger.error(
-                    "Configuration file or environment variables missing. "
-                    "Generate config file with 'tcs-garr init' command or set "
-                    "HARICA_USERNAME and HARICA_PASSWORD "
-                    "environment variables."
-                )
-                exit(1)
-
-        self._validate_config(config_data)
-
-        # Set object attributes from config_data
+        # Set object attributes from config_data, check later against the provided ergs.
         self.username = config_data["username"]
         self.password = config_data["password"]
         self.totp_seed = config_data["totp_seed"]
@@ -161,25 +151,40 @@ class HaricaClientConfig:
         self.webhook_url = config_data["webhook_url"]
         self.webhook_type = config_data["webhook_type"]
 
-    def _validate_config(self, config_data):
+    def as_dict(self):
+        return self.__dict__.copy()
+
+    def validate_config(self, config_data=None):
         """
         Validate the configuration data.
 
         Args:
-            config_data (dict): Configuration data to validate.
+            config_data (dict): Configuration data to validate. If not provided validate instance.
         """
-        mandatory_fields = ["username", "password", "output_folder"]
-        missing_fields = [key for key in mandatory_fields if not config_data.get(key)]
+        if config_data is None:
+            config_data = self.as_dict()
+
+        # Ensure all required environment variables are set
+        missing_fields = [
+            k for k in ("username", "password", "output_folder") if not (v := config_data.get(k)) or not isinstance(v, str)
+        ]
         if missing_fields:
-            logger.error(f"❌ Missing mandatory configuration values for: {', '.join(missing_fields)}")
-            exit(1)
+            error_msg = (
+                "Configuration file or environment variables missing for "
+                f"configuration fields {', '.join(missing_fields)}. \n"
+                "Generate config file with 'tcs-garr init' command or set "
+                "HARICA_USERNAME and HARICA_PASSWORD environment variables."
+            )
+            logger.error(f"❌ {error_msg}")
+            raise TypeError(error_msg)
 
         # Validate email
         pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
-        valid = re.match(pattern, config_data["username"])
+        valid = re.match(pattern, self.username)
         if not valid:
-            logger.error(f"❌ Invalid email format for username: {config_data['username']}")
-            exit(1)
+            error_msg = f"Invalid email format for username: {self.username}"
+            logger.error(f"❌ {error_msg}")
+            raise ValueError(error_msg)
 
         # Validate TOTP seed if provided
         totp_seed = config_data["totp_seed"]
@@ -187,8 +192,9 @@ class HaricaClientConfig:
             try:
                 generate_otp(totp_seed)
             except ValueError:
-                logger.error(f"❌ Invalid TOTP seed: {totp_seed}")
-                exit(1)
+                error_msg = f"Invalid TOTP seed: {totp_seed}"
+                logger.error(f"❌ {error_msg}")
+                raise ValueError(error_msg)
 
 
 def generate_otp(totp_seed):

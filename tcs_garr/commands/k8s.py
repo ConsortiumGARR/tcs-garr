@@ -12,16 +12,17 @@ class K8sCommand(BaseCommand):
 
     Args:
         args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
         """
         Initializes the K8sCommand class.
 
         Args:
             args (argparse.Namespace): The command-line arguments passed to the command.
         """
-        super().__init__(args)
+        super().__init__(args, harica_config)
         self.command_name = "k8s"
         self.help_text = "Generate Kubernetes TLS resource file"
 
@@ -51,16 +52,6 @@ class K8sCommand(BaseCommand):
             default=None,
             help="Name for the yaml file without the extension (optional).",
         )
-
-    def get_output_folder(self):
-        """
-        Retrieve the default output folder from the configuration.
-
-        Returns:
-            str: The output folder path from the configuration.
-        """
-        # Load environment-specific configuration to get the output folder
-        return self.harica_config.output_folder
 
     def execute(self):
         """

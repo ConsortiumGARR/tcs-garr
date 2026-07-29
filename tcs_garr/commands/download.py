@@ -22,12 +22,13 @@ class DownloadCommand(BaseCommand):
 
     Args:
         args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, args, harica_config):
+        super().__init__(args, harica_config)
         self.command_name = "download"
         self.help_text = "Download a certificate by ID"
 
@@ -57,19 +58,6 @@ class DownloadCommand(BaseCommand):
             default="pemBundle",
             help="Type of download: 'pemBundle' or 'certificate'. Default is 'pemBundle'.",
         )
-
-    def get_output_folder(self):
-        """
-        Retrieve the default output folder from the configuration.
-
-        Args:
-            args (argparse.Namespace): The command-line arguments passed to the command.
-
-        Returns:
-            str: The output folder path from the configuration.
-        """
-        # Load environment-specific configuration
-        return self.harica_config.output_folder
 
     def get_trusted_intermediates(self):
         """

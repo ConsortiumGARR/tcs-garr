@@ -6,7 +6,6 @@ from colorama import Fore, Style
 from tcs_garr.harica_client import HaricaClient
 from tcs_garr.logger import setup_logger
 from tcs_garr.notifications import NotificationManager
-from tcs_garr.utils import HaricaClientConfig
 
 
 def requires_any_role(*roles):
@@ -113,24 +112,28 @@ def requires_roles(*roles, logic="OR"):
 
 
 class BaseCommand(ABC):
-    """Base class that all command implementations should inherit from."""
+    """
+    Base class that all command implementations should inherit from.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
+    """
 
     REQUIRED_ROLE = None
 
-    def __init__(self, args):
+    def __init__(self, args, harica_config):
+        self.args = args
+        self.harica_config = harica_config
+
         # Default command name (can be overridden by subclasses)
         self.command_name = None
-
-        self.args = args
-
-        self.logger = setup_logger()
 
         # Default help text (should be overridden by subclasses)
         self.help_text = "No description available"
 
+        self.logger = setup_logger()
         self._harica_client = None
-
-        self._harica_config = None
 
     @abstractmethod
     def configure_parser(self, parser):
@@ -162,15 +165,6 @@ class BaseCommand(ABC):
 
         return self._harica_client
 
-    @property
-    def harica_config(self) -> HaricaClientConfig:
-        if not self._harica_config:
-            self._harica_config = HaricaClientConfig(
-                environment=self.args.environment,
-                alt_config_path=self.args.config,
-            )
-        return self._harica_config
-
     def check_required_role(self, client: HaricaClient):
         """Check if the user has the required role for the command."""
         if self.REQUIRED_ROLE and not client.has_role(self.REQUIRED_ROLE):
@@ -180,18 +174,14 @@ class BaseCommand(ABC):
             exit(1)
 
     @abstractmethod
-    def execute(self, args):
+    def execute(self):
         """
-        Execute the command with the parsed arguments.
-
-        Args:
-            args: The parsed command arguments
+        Execute the command instance with its arguments and configuration. Must be implemented by subclasses.
         """
-        pass
 
     def call_webhook(self, cert_type, cn, cert_id=None):
-        webhook_url = self._harica_config.webhook_url
-        webhook_type = self._harica_config.webhook_type
+        webhook_url = self.harica_config.webhook_url
+        webhook_type = self.harica_config.webhook_type
         if webhook_url:
             try:
                 requestor = self._harica_client.email
@@ -210,3 +200,13 @@ class BaseCommand(ABC):
 
             except Exception as e:
                 self.logger.error(f"Error sending webhook via NotificationManager: {e}")
+
+    def get_output_folder(self):
+        """
+        Retrieve the default output folder from the configuration.
+
+        Returns:
+            str: The output folder path from the configuration.
+        """
+        # Load environment-specific configuration
+        return self.harica_config.output_folder

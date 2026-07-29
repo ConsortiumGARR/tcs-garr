@@ -10,15 +10,15 @@ class TestApiCommand(BaseCommand):
     """
     Command to test Harica API endpoints
 
-
     Args:
         args (argparse.Namespace): The command-line arguments passed to the command.
+        harica_config (HaricaClientConfig): The harica client configuration instance.
     """
 
     REQUIRED_ROLE = UserRole.USER
 
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, args, harica_config):
+        super().__init__(args, harica_config)
         self.command_name = "test"
         self.help_text = "Test Harica API endpoints"
 
