@@ -6,6 +6,7 @@ from unittest.mock import patch
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 
 from tcs_garr.commands.init import InitCommand
+from tcs_garr.commands.revoke import RevokeCommand
 from tcs_garr.commands.whoami import WhoamiCommand
 from tcs_garr.main import logger, main
 import tcs_garr.main
@@ -89,6 +90,16 @@ class TestCommandLineInterface(unittest.TestCase):
             self.exec_main(argv=["--config", "unknown-file", "whoami"], exc=SystemExit)
         self.assertEqual(len(cm.output), 1)
         self.assertIn("Alternative config file", cm.output[0])
+
+    def test_revoke_requires_id_or_list_reasons(self):
+        _, err = self.exec_main(argv=["--no-check-release", "revoke"], exc=SystemExit)
+        self.assertIn("one of the arguments --id --list-reasons is required", err)
+
+    def test_revoke_unknown_certificate_is_not_valid(self):
+        command = RevokeCommand(None, None)
+        with self.assertLogs(level="ERROR") as cm:
+            self.assertFalse(command.is_certificate_valid_for_revocation(None))
+        self.assertIn("Certificate not found.", cm.output[0])
 
     def test_init_runs_without_a_config_file(self):
         # 'init' creates the configuration, so it must run before the file exists

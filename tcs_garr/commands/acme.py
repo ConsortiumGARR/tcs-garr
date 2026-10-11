@@ -2,6 +2,7 @@ from colorama import Fore, Style
 from tabulate import tabulate
 
 from tcs_garr.commands.base import BaseCommand
+from tcs_garr.harica_client import DEFAULT_REVOCATION_REASON
 from tcs_garr.utils import UserRole, format_date_and_check_expiry
 
 
@@ -52,6 +53,19 @@ class AcmeAccountsCommand(BaseCommand):
         # Subcommand to disable an ACME account
         disable_parser = subparsers.add_parser("disable", help="Disable an ACME account")
         disable_parser.add_argument("account_id", type=str, help="ID of the ACME account to disable")
+
+        # Subcommand to revoke a certificate issued through an ACME account
+        revoke_parser = subparsers.add_parser("revoke", help="Revoke a certificate issued through an ACME account")
+        revoke_parser.add_argument(
+            "cert_id", type=str, nargs="?", help="ID of the ACME certificate to revoke (see 'tcs-garr list --type ACME')"
+        )
+        revoke_parser.add_argument(
+            "--reason", help=f"Revocation reason code. Default: {DEFAULT_REVOCATION_REASON} (unspecified)."
+        )
+        revoke_parser.add_argument("--message", default="", help="Message for the certificate owner.")
+        revoke_parser.add_argument(
+            "--list-reasons", action="store_true", help="List the revocation reason codes accepted by --reason."
+        )
 
         # Subcommand for domains
         domains_parser = subparsers.add_parser("domains", help="Perform actions on ACME account domains and rules")
@@ -111,6 +125,13 @@ class AcmeAccountsCommand(BaseCommand):
                 self._disable_account()
             else:
                 self.logger.info("Operation cancelled.")
+        elif action == "revoke":
+            if self.args.list_reasons:
+                self._list_revocation_reasons()
+            elif self.args.cert_id:
+                self._revoke_certificate()
+            else:
+                self.logger.error("You must specify either a certificate ID or --list-reasons.")
         elif action == "domains":
             domain_action = self.args.domain_action
 
@@ -506,3 +527,46 @@ class AcmeAccountsCommand(BaseCommand):
                 self.logger.error(f"{Fore.RED}Failed to disable ACME account with ID: {self.args.account_id}{Style.RESET_ALL}")
         except Exception as e:
             self.logger.error(f"{Fore.RED}Failed to disable ACME account: {e}{Style.RESET_ALL}")
+
+    def _list_revocation_reasons(self):
+        """Prints the revocation reasons accepted by HARICA."""
+        reasons = self.harica_client.get_revocation_reasons("admin")
+        data = [[r.get("name"), r.get("revocationMessage")] for r in reasons]
+        self.logger.info(tabulate(data, headers=[Fore.BLUE + "Code", "Reason" + Style.RESET_ALL]))
+
+    def _revoke_certificate(self):
+        """Revoke a valid certificate issued through an ACME account."""
+        cert_id = self.args.cert_id
+        reason = self.args.reason or DEFAULT_REVOCATION_REASON
+
+        if self.args.reason:
+            reasons = self.harica_client.get_revocation_reasons("admin")
+            if not any(r.get("name") == reason for r in reasons):
+                self.logger.error(f"Invalid revocation reason '{reason}'. Use --list-reasons to see the valid codes.")
+                return
+
+        certs = self.harica_client.list_acme_certificates()
+        cert = next((c for c in certs if c.get("id") == cert_id), None)
+        if not cert:
+            self.logger.error(f"{Fore.RED}No valid ACME certificate found with ID: {cert_id}{Style.RESET_ALL}")
+            return
+
+        self.logger.info(f"You are going to {Fore.RED}revoke{Style.RESET_ALL} an ACME certificate:\n")
+        self.logger.info(f"DN: {cert.get('dn', 'N/A')}")
+        self.logger.info(f"SANs: {cert.get('sans', 'N/A')}")
+        self.logger.info(f"Valid to: {cert.get('validTo', 'N/A')}")
+        self.logger.info(f"ACME account owner: {cert.get('userEmail', 'N/A')}")
+        self.logger.info(f"Reason: {reason}")
+
+        confirm = input(f"{Fore.RED}Are you sure you want to revoke this certificate? (Y/n): {Style.RESET_ALL}")
+        if confirm != "Y":
+            self.logger.info("Operation cancelled.")
+            return
+
+        try:
+            if self.harica_client.revoke_acme_certificate(cert_id, reason, self.args.message):
+                self.logger.info(f"{Fore.GREEN}ACME certificate with ID '{cert_id}' has been revoked.{Style.RESET_ALL}")
+            else:
+                self.logger.error(f"{Fore.RED}Failed to revoke ACME certificate with ID '{cert_id}'.{Style.RESET_ALL}")
+        except PermissionError as e:
+            self.logger.error(f"{Fore.RED}Failed to revoke ACME certificate: {e}{Style.RESET_ALL}")
