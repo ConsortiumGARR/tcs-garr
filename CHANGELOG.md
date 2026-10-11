@@ -1,3 +1,13 @@
+## 0.27.0-rc.0 (2026-10-11)
+
+### Feat
+
+- add revocation reasons, acme revoke and apikey commands
+
+### Fix
+
+- report unknown certificate instead of crashing in revoke
+
 ## 0.26.0 (2026-07-29)
 
 ### Feat
