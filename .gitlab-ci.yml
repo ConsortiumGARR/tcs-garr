@@ -54,7 +54,9 @@ auto-bump:
   rules:
     # Mai sulle pipeline di tag: auto-bump precede build e publish, e un suo
     # fallimento impedirebbe il rilascio del tag appena creato.
-    - if: '$GITLAB_USER_NAME != $CI_USERNAME && $CI_COMMIT_TAG == null && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event")'
+    # Solo sulle pipeline di push: quella della merge request gira sullo stesso
+    # commit, e due bump in parallelo creano lo stesso tag e uno dei due fallisce.
+    - if: '$GITLAB_USER_NAME != $CI_USERNAME && $CI_COMMIT_TAG == null && $CI_PIPELINE_SOURCE == "push"'
 
 build:
   stage: build
