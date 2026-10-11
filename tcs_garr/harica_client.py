@@ -18,6 +18,9 @@ from .utils import generate_otp, CertificateStatus, UserRole
 # Initialize logger
 logger = logging.getLogger(__name__)
 
+# "Unspecified", used by tcs-garr before reasons were selectable
+DEFAULT_REVOCATION_REASON = "4.9.1.1.1.1"
+
 
 class HaricaClient:
     """
@@ -945,12 +948,34 @@ class HaricaClient:
         # Check if the cancellation was successful
         return response.status_code == 200
 
-    def revoke_certificate(self, cert_id: str) -> bool:
+    def get_revocation_reasons(self, scope: str = "ssl") -> list[dict]:
+        """
+        Retrieves the revocation reasons accepted by HARICA.
+
+        Args:
+            scope (str): "user" for users without enterprise roles, "ssl" for SSL
+                approvers, "admin" for enterprise admins (e.g. ACME certificates).
+
+        Returns:
+            list[dict]: Reasons with "name" (the code) and "revocationMessage".
+        """
+        endpoints = {
+            "user": "/api/Certificate/GetRevocationReasons",
+            "ssl": "/api/OrganizationValidatorSSL/GetRevocationReasons",
+            "admin": "/api/OrganizationAdmin/GetRevocationReasons",
+        }
+
+        response = self.__make_post_request(endpoints[scope])
+        response.raise_for_status()
+        return response.json()
+
+    def revoke_certificate(self, cert_id: str, reason: str = DEFAULT_REVOCATION_REASON) -> bool:
         """
         Revokes a certificate based on the provided certificate ID.
 
         Args:
             cert_id (str): The certificate ID to revoke.
+            reason (str): Revocation reason code.
 
         Returns:
             bool: True if the revocation was successful, False otherwise.
@@ -958,8 +983,7 @@ class HaricaClient:
         """
         payload = {
             "transactionId": cert_id,
-            # Name seems to be always 4.9.1.1.1.1
-            "name": "4.9.1.1.1.1",
+            "name": reason,
             "notes": f"Revoked via harica-cli by {self.email}",
             "message": "",
         }
@@ -970,12 +994,13 @@ class HaricaClient:
 
         return response.status_code == 200
 
-    def revoke_user_certificate(self, cert_id: str) -> bool:
+    def revoke_user_certificate(self, cert_id: str, reason: str = DEFAULT_REVOCATION_REASON) -> bool:
         """
         Revokes a user certificate based on the provided certificate ID.
 
         Args:
             cert_id (str): The certificate ID to revoke.
+            reason (str): Revocation reason code.
 
         Returns:
             bool: True if the revocation was successful, False otherwise.
@@ -983,14 +1008,69 @@ class HaricaClient:
         """
         payload = {
             "transactionId": cert_id,
-            # Name seems to be always 4.9.1.1.1.1
-            "name": "4.9.1.1.1.1",
+            "name": reason,
             "notes": f"Revoked via harica-cli by {self.email}",
         }
         response = self.__make_post_request(
             "/api/Certificate/RevokeCertificate",
             data=payload,
         )
+
+        return response.status_code == 200
+
+    def revoke_acme_certificate(self, cert_id: str, reason: str = DEFAULT_REVOCATION_REASON, message: str = "") -> bool:
+        """
+        Revokes a certificate issued through an ACME account.
+
+        Args:
+            cert_id (str): The ACME certificate ID ("id" in GetAcmeCertificatesOfEntry).
+            reason (str): Revocation reason code.
+            message (str): Message for the certificate owner.
+
+        Returns:
+            bool: True if the revocation was successful, False otherwise.
+        """
+        payload = {"transactionId": cert_id, "name": reason, "message": message}
+        response = self.__make_post_request("/api/OrganizationAdmin/RevokeAcmeCertificate", data=payload)
+
+        return response.status_code == 200
+
+    def list_api_keys(self) -> list[dict]:
+        """
+        Retrieves the API keys of the logged in user.
+
+        Returns:
+            list[dict]: API keys with "apiKeyId", "friendlyName", "createdAt", "isActive" and "disabledAt".
+        """
+        response = self.__make_post_request("/api/User/GetMyAPIKeys")
+        response.raise_for_status()
+        return response.json()
+
+    def create_api_key(self, friendly_name: str) -> str:
+        """
+        Creates an API key for the logged in user.
+
+        Args:
+            friendly_name (str): Label of the new key.
+
+        Returns:
+            str: The key code. HARICA shows it only once.
+        """
+        response = self.__make_post_request("/api/User/CreateAPIKey", data={"id": friendly_name})
+        response.raise_for_status()
+        return response.text.strip('"')
+
+    def disable_api_key(self, api_key_id: str) -> bool:
+        """
+        Disables an API key of the logged in user.
+
+        Args:
+            api_key_id (str): The "apiKeyId" of the key.
+
+        Returns:
+            bool: True if the key was disabled, False otherwise.
+        """
+        response = self.__make_post_request("/api/User/DisableAPIKey", data={"id": api_key_id})
 
         return response.status_code == 200
 

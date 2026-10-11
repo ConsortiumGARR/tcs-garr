@@ -71,22 +71,23 @@ and who has not been granted any additional roles by an administrator.
 
 Other roles, apart from **USER**, require 2FA and are provided by an administrator.
 
-| Command  | Role Needed             | 2FA Needed |
-| -------- | ----------------------- | ---------- |
-| approve  | SSL_ENTERPRISE_APPROVER | ✔️          |
-| cancel   | USER                    | ❌          |
-| acme     | ENTERPRISE_ADMIN        | ✔️          |
-| domains  | ENTERPRISE_ADMIN        | ✔️          |
-| download | USER                    | ❌          |
-| init     | None                    | ❌          |
-| k8s      | None                    | ❌          |
-| list     | USER                    | ❌          |
-| request  | USER                    | ❌          |
-| revoke   | USER                    | ❌          |
-| smime    | ENTERPRISE_ADMIN        | ❌          |
-| upgrade  | None                    | ❌          |
-| validate | ENTERPRISE_ADMIN        | ✔️          |
-| whoami   | USER                    | ❌          |
+| Command  |                 Role Needed                 | 2FA Needed |
+| -------- | ------------------------------------------- | ---------- |
+| approve  | SSL_ENTERPRISE_APPROVER                     | ✔️         |
+| cancel   | USER                                        | ❌         |
+| acme     | ENTERPRISE_ADMIN                            | ✔️         |
+| apikey   | ENTERPRISE_ADMIN or any ENTERPRISE_APPROVER | ✔️         |
+| domains  | ENTERPRISE_ADMIN                            | ✔️         |
+| download | USER                                        | ❌         |
+| init     | None                                        | ❌         |
+| k8s      | None                                        | ❌         |
+| list     | USER                                        | ❌         |
+| request  | USER                                        | ❌         |
+| revoke   | USER                                        | ❌         |
+| smime    | ENTERPRISE_ADMIN                            | ❌         |
+| upgrade  | None                                        | ❌         |
+| validate | ENTERPRISE_ADMIN                            | ✔️         |
+| whoami   | USER                                        | ❌         |
 
 ## 🛠 Installation
 
@@ -169,14 +170,15 @@ To see all available commands and options:
 tcs-garr --help
 
 usage: tcs-garr [-h] [--debug] [--version] [--no-check-release] [--environment {production,stg}]
-                {acme,approve,cancel,domains,download,init,k8s,list,request,revoke,test,upgrade,validate,whoami} ...
+                {acme,apikey,approve,cancel,domains,download,init,k8s,list,request,revoke,smime,test,upgrade,validate,whoami} ...
 
 Harica Certificate Manager
 
 positional arguments:
-  {acme,approve,cancel,domains,download,init,k8s,list,request,revoke,test,upgrade,validate,whoami}
+  {acme,apikey,approve,cancel,domains,download,init,k8s,list,request,revoke,smime,test,upgrade,validate,whoami}
                         Available commands
     acme                List ACME accounts configured in Harica
+    apikey              Manage your HARICA API keys
     approve             Approve a certificate by ID
     cancel              Cancel a request by ID
     domains             List available domains
@@ -470,27 +472,34 @@ tcs-garr --environment stg init
 11. **Revoke certificate**:
 
    ```bash
-   usage: tcs-garr revoke [-h] --id ID
+   usage: tcs-garr revoke [-h] (--id ID | --list-reasons) [--reason REASON]
 
    options:
-   -h, --help  show this help message and exit
-   --id ID     ID of the certificate to revoke.
+   -h, --help       show this help message and exit
+   --id ID          ID of the certificate to revoke.
+   --list-reasons   List the revocation reason codes accepted by --reason.
+   --reason REASON  Revocation reason code. Default: 4.9.1.1.1.1 (unspecified).
    ```
 
-   Only certificates requested via API can be revoked. ACME certificates cannot be
-   revoked via this client.
+   Only certificates requested via API can be revoked with this command. ACME
+   certificates are revoked with `tcs-garr acme revoke`.
+
+   Without `--reason` the certificate is revoked with the code `4.9.1.1.1.1`
+   (unspecified), as in previous versions. Use `--list-reasons` to see the codes
+   HARICA accepts for your role.
 
 12. **Acme accounts**:
 
    ```bash
-   usage: tcs-garr acme [-h] {list,info,create,disable,domains} ...
+   usage: tcs-garr acme [-h] {list,info,create,disable,revoke,domains} ...
 
    positional arguments:
-   {list,info,create,disable,domains}
+   {list,info,create,disable,revoke,domains}
       list                List all ACME accounts
       info                Get information on a specific ACME account including secrets
       create              Create a new ACME account
       disable             Disable an ACME account
+      revoke              Revoke a certificate issued through an ACME account
       domains             Perform actions on ACME account domains and rules
 
    options:
@@ -500,8 +509,12 @@ tcs-garr --environment stg init
    This command allows you to manage ACME accounts, including listing all accounts,
    getting information on a specific account, creating new accounts, and performing
    actions on ACME account domains and rules. You can use the `list`, `info`, `create`,
-   `disable` and `domains` subcommands to perform these actions. Check `help` for each
-   subcommand for more details.
+   `disable`, `revoke` and `domains` subcommands to perform these actions. Check `help`
+   for each subcommand for more details.
+
+   `acme revoke <cert_id>` revokes a valid ACME certificate; the ID is the one shown by
+   `tcs-garr list --type ACME`. It accepts `--reason`, `--message` (for the
+   certificate owner) and `--list-reasons`, like the `revoke` command.
 
 13. **Issue S/MIME Certificates**:
 
@@ -547,6 +560,23 @@ tcs-garr --environment stg init
    option to specify the endpoint you want to test. You can also use the `--data` option
    to send data with the request in JSON format. Finally, you can use the `--foutput`
    option to save the JSON response to a file.
+
+15. **API keys**:
+
+   ```bash
+   usage: tcs-garr apikey [-h] {list,create,disable} ...
+
+   positional arguments:
+   {list,create,disable}
+      list                List your API keys
+      create              Create a new API key
+      disable             Disable an API key
+   ```
+
+   This command manages the API keys of the logged-in user, the same keys shown in the
+   profile page of CertManager. HARICA grants API keys only to Enterprise Admins and
+   Enterprise Approvers, up to 3 keys per user. The code of a new key is printed only
+   once by `create`: store it securely.
 
 ## 🐍 Usage from Python
 

@@ -90,6 +90,10 @@ class TestCommandLineInterface(unittest.TestCase):
         self.assertEqual(len(cm.output), 1)
         self.assertIn("Alternative config file", cm.output[0])
 
+    def test_revoke_requires_id_or_list_reasons(self):
+        _, err = self.exec_main(argv=["--no-check-release", "revoke"], exc=SystemExit)
+        self.assertIn("one of the arguments --id --list-reasons is required", err)
+
     def test_init_runs_without_a_config_file(self):
         # 'init' creates the configuration, so it must run before the file exists
         with patch.object(InitCommand, "execute") as execute:

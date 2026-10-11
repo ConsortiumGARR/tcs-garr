@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 
 from colorama import Fore, Style
+from tabulate import tabulate
 
 from tcs_garr.commands.base import BaseCommand
+from tcs_garr.harica_client import DEFAULT_REVOCATION_REASON
 from tcs_garr.utils import UserRole
 
 
@@ -35,17 +37,26 @@ class RevokeCommand(BaseCommand):
         Args:
             parser (argparse.ArgumentParser): The argument parser to configure.
         """
+        action_group = parser.add_mutually_exclusive_group(required=True)
         # Argument for the certificate ID that will be canceled
-        parser.add_argument(
+        action_group.add_argument(
             "--id",
-            required=True,
             help="ID of the certificate to revoke.",
+        )
+        action_group.add_argument(
+            "--list-reasons",
+            action="store_true",
+            help="List the revocation reason codes accepted by --reason.",
+        )
+        parser.add_argument(
+            "--reason",
+            help=f"Revocation reason code. Default: {DEFAULT_REVOCATION_REASON} (unspecified).",
         )
 
     def is_certificate_valid_for_revocation(self, cert) -> bool:
         """Checks if a certificate is eligible for revocation."""
         if "acmeEntryId" in cert:
-            self.logger.error("ACME certificates cannot be revoked via tcs-garr.")
+            self.logger.error("ACME certificates must be revoked with 'tcs-garr acme revoke'.")
             return False
 
         if not cert:
@@ -72,6 +83,17 @@ class RevokeCommand(BaseCommand):
         """
         is_user_only = self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1
 
+        reasons_scope = "user" if is_user_only else "ssl"
+
+        if self.args.list_reasons:
+            self._list_reasons(reasons_scope)
+            return
+
+        reason = self.args.reason or DEFAULT_REVOCATION_REASON
+        if self.args.reason and not self._is_valid_reason(self.args.reason, reasons_scope):
+            self.logger.error(f"Invalid revocation reason '{self.args.reason}'. Use --list-reasons to see the valid codes.")
+            exit(1)
+
         id = self.args.id
         if is_user_only:
             cert = self.harica_client.get_user_certificate(id)
@@ -92,6 +114,7 @@ class RevokeCommand(BaseCommand):
         self.logger.info(f"Valid from: {valid_from.strftime('%d %B %Y %H:%M:%S')}")
         self.logger.info(f"Valid to: {valid_to.strftime('%d %B %Y %H:%M:%S')}")
         self.logger.info(f"DNS names: {', '.join(dns_names)}")
+        self.logger.info(f"Reason: {reason}")
 
         dns_name = input(
             "\nPlease enter one of the following DNS names "
@@ -115,7 +138,18 @@ class RevokeCommand(BaseCommand):
         # Pick the appropriate revoke function
         revoke_func = revoke_methods[is_user_only]
 
-        if revoke_func(id):
+        if revoke_func(id, reason):
             self.logger.info(f"Certificate with ID '{id}' has been revoked.")
         else:
             self.logger.error(f"Failed to revoke certificate with ID '{id}'.")
+
+    def _list_reasons(self, scope: str):
+        """Prints the revocation reasons accepted by HARICA."""
+        reasons = self.harica_client.get_revocation_reasons(scope)
+        data = [[r.get("name"), r.get("revocationMessage")] for r in reasons]
+        self.logger.info(tabulate(data, headers=[Fore.BLUE + "Code", "Reason" + Style.RESET_ALL]))
+
+    def _is_valid_reason(self, reason: str, scope: str) -> bool:
+        """Checks that the reason code is one of those accepted by HARICA."""
+        reasons = self.harica_client.get_revocation_reasons(scope)
+        return any(r.get("name") == reason for r in reasons)
