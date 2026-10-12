@@ -1,6 +1,7 @@
 from colorama import Fore, Style
 
 from tcs_garr.commands.base import BaseCommand
+from tcs_garr.harica_client import CONSTRUCTED_EMAIL_USERS, DOMAIN_VALIDATION_METHODS
 from tcs_garr.utils import UserRole
 
 
@@ -41,6 +42,19 @@ class ValidateCommand(BaseCommand):
         """
         # Argument for the comma-separated list of domains to validate
         parser.add_argument("--domains", required=True, help="Comma separated list of domains.")
+        parser.add_argument(
+            "--method",
+            choices=list(DOMAIN_VALIDATION_METHODS),
+            default="dns",
+            help="Validation method: 'dns' (DNS change, 3.2.2.4.7) or 'email' "
+            "(constructed email to domain contact, 3.2.2.4.4). Default: dns.",
+        )
+        parser.add_argument(
+            "--email-user",
+            choices=CONSTRUCTED_EMAIL_USERS,
+            default="admin",
+            help="Mailbox that receives the token with --method email, as <email-user>@<domain>. Default: admin.",
+        )
 
     def execute(self):
         """
@@ -57,10 +71,12 @@ class ValidateCommand(BaseCommand):
         domains = self.args.domains.split(",")
 
         # Submit the domains for validation via the Harica client
-        self.harica_client.validate_domains(domains)
+        self.harica_client.validate_domains(domains, method=self.args.method, email_user=self.args.email_user)
 
         # Log the result for each domain
         for domain in domains:
-            self.logger.info(
-                f"{Fore.GREEN}✅ Domain {domain} prevalidation submitted. You will receive an email soon with token to configure DNS.{Style.RESET_ALL}"
-            )
+            if self.args.method == "email":
+                next_step = f"{self.args.email_user}@{domain} will receive an email soon with the validation link."
+            else:
+                next_step = "You will receive an email soon with token to configure DNS."
+            self.logger.info(f"{Fore.GREEN}✅ Domain {domain} prevalidation submitted. {next_step}{Style.RESET_ALL}")

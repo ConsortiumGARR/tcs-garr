@@ -5,13 +5,13 @@ import logging
 import time
 import zipfile
 from threading import Lock
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import jwt
 import requests
 from bs4 import BeautifulSoup
 
-from .exceptions import CertificateNotApprovedException
+from .exceptions import CertificateNotApprovedException, ErrorPageError, RateLimitError
 
 from .utils import generate_otp, CertificateStatus, UserRole
 
@@ -20,6 +20,42 @@ logger = logging.getLogger(__name__)
 
 # "Unspecified", used by tcs-garr before reasons were selectable
 DEFAULT_REVOCATION_REASON = "4.9.1.1.1.1"
+
+# CA/B Forum Baseline Requirements domain validation methods offered to enterprise admins
+DOMAIN_VALIDATION_METHODS = {
+    "dns": "3.2.2.4.7",  # DNS Change
+    "email": "3.2.2.4.4",  # Constructed Email to Domain Contact
+}
+# Enterprise validator endpoints, same actions for S/MIME and Client Authentication
+ENTERPRISE_VALIDATOR_ENDPOINTS = {
+    "smime": {
+        "requests": "/api/OrganizationValidatorSmime/GetEnterpriseTransactions",
+        "certificates": "/api/OrganizationValidatorSmime/GetEnterpriseCertificates",
+        "review": "/api/OrganizationValidatorSmime/UpdateEnterpriseReview",
+        "cancel": "/api/OrganizationValidatorSmime/CancelTransaction",
+        "revoke": "/api/OrganizationValidatorSmime/RevokeCertificate",
+        "reasons": "/api/OrganizationValidatorSmime/GetRevocationReasons",
+    },
+    "clientauth": {
+        "requests": "/api/OrganizationValidatorClientAuthentication/GetEnterpriseClientAuthenticationRequests",
+        "certificates": "/api/OrganizationValidatorClientAuthentication/GetEnterpriseClientAuthenticationCertificates",
+        "review": "/api/OrganizationValidatorClientAuthentication/UpdateEnterpriseReview",
+        "cancel": "/api/OrganizationValidatorClientAuthentication/CancelEnterpriseTransaction",
+        "revoke": "/api/OrganizationValidatorClientAuthentication/RevokeEnterpriseClientCertificate",
+        "reasons": "/api/OrganizationValidatorClientAuthentication/GetRevocationReasons",
+    },
+}
+# Status names of the enterprise validator requests, "Canceled" with one "l" unlike SSL
+ENTERPRISE_REQUEST_STATUSES = ["Pending", "Ready", "Completed", "Canceled"]
+ENTERPRISE_CERTIFICATE_STATUSES = ["Valid", "Revoked", "Expired"]
+
+# Retries after a 429 Too Many Requests, waiting 2, 4, 8 and 16 seconds unless
+# HARICA sends Retry-After
+RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_MAX_DELAY = 60
+
+# Mailboxes accepted by 3.2.2.4.4, prepended to the domain being validated
+CONSTRUCTED_EMAIL_USERS = ["admin", "administrator", "webmaster", "hostmaster", "postmaster"]
 
 
 class HaricaClient:
@@ -178,6 +214,9 @@ class HaricaClient:
         login_response.raise_for_status()
 
         self.token = login_response.text
+
+        # The token read before the login belongs to the anonymous session
+        self.request_verification_token = None
         if not self.token:
             if self.totp_seed:
                 raise Exception("Failed to retrieve JWT token.")
@@ -224,7 +263,7 @@ class HaricaClient:
         """
         pending_status = CertificateStatus.PENDING
 
-        pending_certs = self.list_certificates(status=pending_status)
+        pending_certs = self._fetch_all_pages(lambda start: self.list_certificates(start_index=start, status=pending_status))
         logger.debug(json.dumps(pending_certs))
 
         for pc in pending_certs:
@@ -244,16 +283,18 @@ class HaricaClient:
                 raise ValueError("Certificate not available via GetSSLCertificate")
 
             return data
+        except RateLimitError:
+            raise
         except Exception:
             pass
 
         # Step 3: Search ACME certificates if not available via main API
         try:
-            for status in CertificateStatus:
-                acme_certs = self.list_acme_certificates(status=status)
-                for cert in acme_certs:
-                    if cert.get("id") == certificate_id:
-                        return cert
+            for cert in self.list_acme_certificates(status=None):
+                if cert.get("id") == certificate_id:
+                    return cert
+        except RateLimitError:
+            raise
         except Exception as e:
             logger.error(f"Failed to retrieve certificate from ACME list: {e}")
 
@@ -378,7 +419,7 @@ class HaricaClient:
 
         Args:
             id (str): The ID of the ACME account to retrieve certificates for.
-            status (CertificateStatus): The status of certificates to retrieve.
+            status (CertificateStatus): The status of certificates to retrieve, None for all.
 
         Returns:
             list[dict]: List of ACME certificates across all accounts filtered by status.
@@ -403,12 +444,14 @@ class HaricaClient:
                 response = self.__make_post_request(endpoint, data=payload)
                 response.raise_for_status()
                 certs = response.json()
+            except RateLimitError:
+                raise
             except Exception as e:
                 logger.error(f"Failed to get ACME certificates for account {account_id}: {e}")
                 continue
 
             for cert in certs:
-                if cert.get("statusName") == status.value:
+                if status is None or cert.get("statusName") == status.value:
                     cert["userEmail"] = user
                     acme_certs.append(cert)
 
@@ -845,6 +888,26 @@ class HaricaClient:
 
         return p7b_data
 
+    def _fetch_all_pages(self, fetch_page):
+        """
+        Collects all the pages of a paginated HARICA list.
+
+        Args:
+            fetch_page (callable): Returns the page starting at the given index.
+
+        Returns:
+            list: The items of all pages, until HARICA returns an empty page.
+        """
+        items = []
+        previous = None
+        while True:
+            page = fetch_page(len(items))
+            # Also stop if HARICA ignores startIndex and repeats the same page
+            if not page or page == previous:
+                return items
+            items.extend(page)
+            previous = page
+
     def get_pending_transactions(self):
         """
         Retrieves a list of pending transactions.
@@ -852,20 +915,19 @@ class HaricaClient:
         Returns:
             List: A list of pending transactions.
         """
-        # Prepare the payload to retrieve SSL reviewable transactions
-        json_payload = {
-            "startIndex": 0,
-            "status": CertificateStatus.PENDING.value,
-            "filterPostDTOs": [],
-        }
 
-        # Make a POST request to fetch the pending SSL transactions
-        transactions = self.__make_post_request(
-            "/api/OrganizationValidatorSSL/GetSSLReviewableTransactions",
-            data=json_payload,
-        ).json()
+        def fetch_page(start_index):
+            json_payload = {
+                "startIndex": start_index,
+                "status": CertificateStatus.PENDING.value,
+                "filterPostDTOs": [],
+            }
+            return self.__make_post_request(
+                "/api/OrganizationValidatorSSL/GetSSLReviewableTransactions",
+                data=json_payload,
+            ).json()
 
-        return transactions
+        return self._fetch_all_pages(fetch_page)
 
     def approve_transaction(self, transaction_id):
         """
@@ -954,7 +1016,8 @@ class HaricaClient:
 
         Args:
             scope (str): "user" for users without enterprise roles, "ssl" for SSL
-                approvers, "admin" for enterprise admins (e.g. ACME certificates).
+                approvers, "admin" for enterprise admins (e.g. ACME certificates),
+                "smime" and "clientauth" for the enterprise approvers of those areas.
 
         Returns:
             list[dict]: Reasons with "name" (the code) and "revocationMessage".
@@ -963,6 +1026,7 @@ class HaricaClient:
             "user": "/api/Certificate/GetRevocationReasons",
             "ssl": "/api/OrganizationValidatorSSL/GetRevocationReasons",
             "admin": "/api/OrganizationAdmin/GetRevocationReasons",
+            **{area: endpoints["reasons"] for area, endpoints in ENTERPRISE_VALIDATOR_ENDPOINTS.items()},
         }
 
         response = self.__make_post_request(endpoints[scope])
@@ -1035,6 +1099,144 @@ class HaricaClient:
 
         return response.status_code == 200
 
+    def list_enterprise_requests(self, area: str, status: str = "Pending") -> list[dict]:
+        """
+        Retrieves the requests that an enterprise approver can review.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            status (str): One of ENTERPRISE_REQUEST_STATUSES.
+
+        Returns:
+            list[dict]: Requests of all pages.
+        """
+        endpoint = ENTERPRISE_VALIDATOR_ENDPOINTS[area]["requests"]
+
+        def fetch_page(start_index):
+            payload = {"startIndex": start_index, "status": status, "filterPostDTOs": []}
+            response = self.__make_post_request(endpoint, data=payload)
+            # HARICA answers an unknown status with an empty body
+            return response.json() if response.text else []
+
+        return self._fetch_all_pages(fetch_page)
+
+    def list_enterprise_certificates(self, area: str, status: str = "Valid") -> list[dict]:
+        """
+        Retrieves the certificates of the requests handled by enterprise approvers.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            status (str): One of ENTERPRISE_CERTIFICATE_STATUSES.
+
+        Returns:
+            list[dict]: Certificates of all pages.
+        """
+        endpoint = ENTERPRISE_VALIDATOR_ENDPOINTS[area]["certificates"]
+
+        def fetch_page(start_index):
+            payload = {"startIndex": start_index, "filterPostDTOs": []}
+            if area == "clientauth":
+                # Same defaults as the web frontend: from the epoch to now
+                payload.update(
+                    selectedList=status,
+                    dateFrom="1970-01-01T00:00:00.000Z",
+                    dateTo=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                )
+            else:
+                payload["status"] = status
+            response = self.__make_post_request(endpoint, data=payload)
+            return response.json() if response.text else []
+
+        return self._fetch_all_pages(fetch_page)
+
+    def approve_enterprise_request(self, area: str, transaction_id: str) -> bool:
+        """
+        Approves a pending request by submitting its open reviews, as approve does for SSL.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            transaction_id (str): The ID of the pending request.
+
+        Returns:
+            bool: True if all reviews were submitted, False if there was nothing to review
+                or HARICA refused a review.
+        """
+        reviews = [
+            (review["reviewId"], review["reviewValue"])
+            for request in self.list_enterprise_requests(area, "Pending")
+            if request.get("transactionId") == transaction_id
+            for review in request.get("reviewGetDTOs") or []
+            if not review.get("isReviewed") and review.get("reviewId") and "reviewValue" in review
+        ]
+        if not reviews:
+            logger.warning(f"No available reviews for transaction with ID {transaction_id}")
+            return False
+
+        for review_id, review_value in reviews:
+            payload = {
+                "reviewId": (None, review_id),
+                "isValid": (None, "true"),
+                "informApplicant": (None, "true"),
+                "reviewMessage": (None, f"Approved via harica-cli by {self.email}"),
+                "reviewValue": (None, review_value),
+            }
+            response = self.__make_post_request(
+                ENTERPRISE_VALIDATOR_ENDPOINTS[area]["review"], data=payload, content_type="multipart/form-data"
+            )
+            if response.status_code != 200:
+                logger.error(f"Failed to approve review {review_id} for transaction {transaction_id}")
+                return False
+
+        return True
+
+    def cancel_enterprise_request(self, area: str, transaction_id: str, message: str, inform_applicant: bool) -> bool:
+        """
+        Cancels a request of another user as enterprise approver.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            transaction_id (str): The ID of the request.
+            message (str): Status message shown for the request.
+            inform_applicant (bool): Send the message to the applicant by email.
+
+        Returns:
+            bool: True if the request was cancelled, False otherwise.
+        """
+        payload = {
+            "transactionId": transaction_id,
+            "notes": f"Cancelled via harica-cli by {self.email}",
+            "statusMessage": message,
+            "informApplicant": inform_applicant,
+        }
+        response = self.__make_post_request(ENTERPRISE_VALIDATOR_ENDPOINTS[area]["cancel"], data=payload)
+
+        return response.status_code == 200
+
+    def revoke_enterprise_certificate(
+        self, area: str, transaction_id: str, reason: str = DEFAULT_REVOCATION_REASON, message: str = ""
+    ) -> bool:
+        """
+        Revokes a certificate as enterprise approver.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            transaction_id (str): The transaction ID of the certificate.
+            reason (str): Revocation reason code.
+            message (str): Message for the certificate owner.
+
+        Returns:
+            bool: True if the revocation was successful, False otherwise.
+        """
+        payload = {
+            "transactionId": transaction_id,
+            "name": reason,
+            "notes": f"Revoked via harica-cli by {self.email}",
+            "message": message,
+        }
+        response = self.__make_post_request(ENTERPRISE_VALIDATOR_ENDPOINTS[area]["revoke"], data=payload)
+
+        return response.status_code == 200
+
     def list_api_keys(self) -> list[dict]:
         """
         Retrieves the API keys of the logged in user.
@@ -1102,7 +1304,7 @@ class HaricaClient:
 
         return self.__make_post_request("/api/OrganizationAdmin/GetAcmeEntries", data={"key": "", "value": ""}).json()
 
-    def validate_domains(self, domains=[]):
+    def validate_domains(self, domains=[], method="dns", email_user="admin"):
         """
         Create a validation token for the specified domains.
 
@@ -1113,6 +1315,9 @@ class HaricaClient:
 
         Args:
             domains (list): A list of domain names that need to be validated.
+            method (str): "dns" (DNS change) or "email" (constructed email to domain contact).
+            email_user (str): Mailbox for the "email" method, one of CONSTRUCTED_EMAIL_USERS.
+                The token is sent to <email_user>@<domain>.
 
         Raises:
             Exception: If there are no groups available or if domain validity data is not available.
@@ -1133,8 +1338,8 @@ class HaricaClient:
             "/api/OrganizationAdmin/GetDomainsValidityByGroupId", data={"id": group_id}
         ).json()
 
-        # List to store IDs of domains that need to be validated
-        domains_id_to_validate = []
+        # Domains (ID and name) that need to be validated
+        domains_to_validate = []
 
         # Check each domain's validity and filter the ones that need validation
         for item in domain_validities:
@@ -1144,18 +1349,19 @@ class HaricaClient:
 
             # If the domain is in the provided list, add its ID to the list for validation
             if domain_name in domains:
-                domains_id_to_validate.append(domain_id)
+                domains_to_validate.append((domain_id, domain_name))
 
         # Step 3: Create validation tokens for the domains that need validation
-        for domain_id in domains_id_to_validate:
+        for domain_id, domain_name in domains_to_validate:
             # Make a request to create the validation token for each domain
             self.__make_post_request(
                 "/api/OrganizationAdmin/CreatePrevalidatedValidation",
                 data={
                     "usersEmail": self.email,
-                    "validationMethodName": "3.2.2.4.7",  # Fixed validation method name
+                    "validationMethodName": DOMAIN_VALIDATION_METHODS[method],
                     "organizationId": domain_id,  # ID of the domain to validate
-                    "whoisEmail": "",  # Empty WHOIS email, can be customized
+                    # Recipient of the token for the constructed email method
+                    "whoisEmail": f"{email_user}@{domain_name}" if method == "email" else "",
                 },
             )
 
@@ -1174,10 +1380,14 @@ class HaricaClient:
 
         Raises:
             ValueError: If the HTTP method is unsupported.
+            RateLimitError: If HARICA still answers 429 after RATE_LIMIT_RETRIES retries.
+            ErrorPageError: If HARICA redirects the call to its /Error page.
             Exception: If the API request fails (non-200 status code).
         """
-        # Ensure we have the necessary request verification token
-        self.__get_request_verification_token()
+        # The token stays valid for the whole session, the web frontend reuses it too
+        token_reused = bool(self.request_verification_token)
+        if not token_reused:
+            self.__get_request_verification_token()
 
         # Update headers for authentication and content type
         self.session.headers.update(
@@ -1195,17 +1405,42 @@ class HaricaClient:
         url = urljoin(self.base_url, endpoint)
 
         try:
-            # Send the request based on the chosen method (GET or POST)
-            if method == "GET":
-                response = self.session.get(url)
-            elif method == "POST":
-                # Handle different content types for POST requests
-                if content_type == "multipart/form-data":
-                    response = self.session.post(url, files=data)
+            for attempt in range(RATE_LIMIT_RETRIES + 1):
+                # Send the request based on the chosen method (GET or POST)
+                if method == "GET":
+                    response = self.session.get(url)
+                elif method == "POST":
+                    # Handle different content types for POST requests
+                    if content_type == "multipart/form-data":
+                        response = self.session.post(url, files=data)
+                    else:
+                        response = self.session.post(url, json=data)
                 else:
-                    response = self.session.post(url, json=data)
-            else:
-                raise ValueError("Unsupported method. Use 'GET' or 'POST'.")
+                    raise ValueError("Unsupported method. Use 'GET' or 'POST'.")
+
+                if response.status_code != 429:
+                    break
+                if attempt == RATE_LIMIT_RETRIES:
+                    raise RateLimitError(
+                        f"HARICA rate limit (429 Too Many Requests) on {endpoint}, "
+                        f"still failing after {RATE_LIMIT_RETRIES} retries. Retry later."
+                    )
+
+                # A 429 request was not processed, so sending it again is safe
+                delay = self._rate_limit_delay(response, attempt)
+                logger.warning(
+                    f"HARICA rate limit (429) on {endpoint}, retrying in {delay}s ({attempt + 1}/{RATE_LIMIT_RETRIES})"
+                )
+                time.sleep(delay)
+
+            # HARICA answers a rejected RequestVerificationToken with a redirect to /Error
+            if response.history and urlparse(response.url).path == "/Error":
+                self.request_verification_token = None
+                # Only reads are sent again: a write may have been processed before the error
+                if token_reused and endpoint.rsplit("/", 1)[-1].startswith(("Get", "Search", "Check")):
+                    logger.debug(f"{endpoint} redirected to /Error, retrying with a new token")
+                    return self.__make_api_request(endpoint, method=method, data=data, content_type=content_type)
+                raise ErrorPageError(f"HARICA redirected {endpoint} to its error page. Retry later.")
 
             if response.status_code == 400 or response.status_code == 401:
                 raise PermissionError(response.text or "Permission denied.")
@@ -1221,6 +1456,23 @@ class HaricaClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error during {method} request to {url}: {e}")
             raise
+
+    @staticmethod
+    def _rate_limit_delay(response, attempt):
+        """
+        Seconds to wait before retrying a 429 response.
+
+        Args:
+            response (Response): The 429 response.
+            attempt (int): Number of retries already done.
+
+        Returns:
+            int: Retry-After when it is a number of seconds, otherwise 2, 4, 8, ...,
+                capped at RATE_LIMIT_MAX_DELAY.
+        """
+        retry_after = response.headers.get("Retry-After", "")
+        delay = int(retry_after) if retry_after.isdigit() else 2 ** (attempt + 1)
+        return min(delay, RATE_LIMIT_MAX_DELAY)
 
     def __make_get_request(self, endpoint, content_type="application/json"):
         """

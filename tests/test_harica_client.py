@@ -63,6 +63,74 @@ class TestHaricaClientPayloads(unittest.TestCase):
         self.assertEqual(self.client.create_api_key("ci"), "abc123")
         self.post.assert_called_once_with("/api/User/CreateAPIKey", data={"id": "ci"})
 
+    def _mock_domain_lookup(self):
+        groups = MagicMock(json=MagicMock(return_value=[{"id": "group-1"}]))
+        validities = MagicMock(
+            json=MagicMock(
+                return_value=[
+                    {"organizationId": "dom-1", "domain": "example.org"},
+                    {"organizationId": "dom-2", "domain": "other.org"},
+                ]
+            )
+        )
+        self.post.side_effect = [groups, validities, MagicMock(status_code=200)]
+
+    def test_validate_domains_default_payload(self):
+        self._mock_domain_lookup()
+        self.client.validate_domains(["example.org"])
+        self.post.assert_called_with(
+            "/api/OrganizationAdmin/CreatePrevalidatedValidation",
+            data={
+                "usersEmail": "user@example.org",
+                "validationMethodName": "3.2.2.4.7",
+                "organizationId": "dom-1",
+                "whoisEmail": "",
+            },
+        )
+
+    def test_validate_domains_email_payload(self):
+        self._mock_domain_lookup()
+        self.client.validate_domains(["example.org"], method="email", email_user="hostmaster")
+        self.post.assert_called_with(
+            "/api/OrganizationAdmin/CreatePrevalidatedValidation",
+            data={
+                "usersEmail": "user@example.org",
+                "validationMethodName": "3.2.2.4.4",
+                "organizationId": "dom-1",
+                "whoisEmail": "hostmaster@example.org",
+            },
+        )
+
+    def _pages(self, *pages):
+        self.post.side_effect = [MagicMock(json=MagicMock(return_value=page)) for page in pages]
+
+    def test_pending_transactions_reads_all_pages(self):
+        self._pages([{"transactionId": "a"}, {"transactionId": "b"}], [{"transactionId": "c"}], [])
+        transactions = self.client.get_pending_transactions()
+        self.assertEqual([t["transactionId"] for t in transactions], ["a", "b", "c"])
+        self.assertEqual([c.kwargs["data"]["startIndex"] for c in self.post.call_args_list], [0, 2, 3])
+        self.assertEqual(self.post.call_args.kwargs["data"]["status"], "Pending")
+
+    def test_pending_transactions_single_page(self):
+        self._pages([{"transactionId": "a"}], [])
+        self.assertEqual(len(self.client.get_pending_transactions()), 1)
+        self.assertEqual(self.post.call_count, 2)
+
+    def test_get_certificate_searches_acme_once(self):
+        self.post.side_effect = PermissionError("not an SSL certificate")
+        acme = MagicMock(return_value=[{"id": "other"}, {"id": "acme-1"}])
+        with patch.object(self.client, "list_certificates", return_value=[]):
+            with patch.object(self.client, "list_acme_certificates", acme):
+                self.assertEqual(self.client.get_certificate("acme-1"), {"id": "acme-1"})
+        acme.assert_called_once_with(status=None)
+
+    def test_list_acme_certificates_status_filter(self):
+        certs = [{"id": "v", "statusName": "Valid"}, {"id": "r", "statusName": "Revoked"}]
+        self.post.return_value = MagicMock(json=MagicMock(return_value=certs))
+        with patch.object(self.client, "list_acme_accounts", return_value=[{"id": "acc", "userEmail": "u"}]):
+            self.assertEqual([c["id"] for c in self.client.list_acme_certificates()], ["v"])
+            self.assertEqual([c["id"] for c in self.client.list_acme_certificates(status=None)], ["v", "r"])
+
 
 if __name__ == "__main__":
     unittest.main()
