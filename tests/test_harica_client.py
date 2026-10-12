@@ -116,6 +116,21 @@ class TestHaricaClientPayloads(unittest.TestCase):
         self.assertEqual(len(self.client.get_pending_transactions()), 1)
         self.assertEqual(self.post.call_count, 2)
 
+    def test_get_certificate_searches_acme_once(self):
+        self.post.side_effect = PermissionError("not an SSL certificate")
+        acme = MagicMock(return_value=[{"id": "other"}, {"id": "acme-1"}])
+        with patch.object(self.client, "list_certificates", return_value=[]):
+            with patch.object(self.client, "list_acme_certificates", acme):
+                self.assertEqual(self.client.get_certificate("acme-1"), {"id": "acme-1"})
+        acme.assert_called_once_with(status=None)
+
+    def test_list_acme_certificates_status_filter(self):
+        certs = [{"id": "v", "statusName": "Valid"}, {"id": "r", "statusName": "Revoked"}]
+        self.post.return_value = MagicMock(json=MagicMock(return_value=certs))
+        with patch.object(self.client, "list_acme_accounts", return_value=[{"id": "acc", "userEmail": "u"}]):
+            self.assertEqual([c["id"] for c in self.client.list_acme_certificates()], ["v"])
+            self.assertEqual([c["id"] for c in self.client.list_acme_certificates(status=None)], ["v", "r"])
+
 
 if __name__ == "__main__":
     unittest.main()

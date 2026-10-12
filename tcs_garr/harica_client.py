@@ -11,7 +11,7 @@ import jwt
 import requests
 from bs4 import BeautifulSoup
 
-from .exceptions import CertificateNotApprovedException
+from .exceptions import CertificateNotApprovedException, RateLimitError
 
 from .utils import generate_otp, CertificateStatus, UserRole
 
@@ -26,6 +26,11 @@ DOMAIN_VALIDATION_METHODS = {
     "dns": "3.2.2.4.7",  # DNS Change
     "email": "3.2.2.4.4",  # Constructed Email to Domain Contact
 }
+# Retries after a 429 Too Many Requests, waiting 2, 4, 8 and 16 seconds unless
+# HARICA sends Retry-After
+RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_MAX_DELAY = 60
+
 # Mailboxes accepted by 3.2.2.4.4, prepended to the domain being validated
 CONSTRUCTED_EMAIL_USERS = ["admin", "administrator", "webmaster", "hostmaster", "postmaster"]
 
@@ -252,16 +257,18 @@ class HaricaClient:
                 raise ValueError("Certificate not available via GetSSLCertificate")
 
             return data
+        except RateLimitError:
+            raise
         except Exception:
             pass
 
         # Step 3: Search ACME certificates if not available via main API
         try:
-            for status in CertificateStatus:
-                acme_certs = self.list_acme_certificates(status=status)
-                for cert in acme_certs:
-                    if cert.get("id") == certificate_id:
-                        return cert
+            for cert in self.list_acme_certificates(status=None):
+                if cert.get("id") == certificate_id:
+                    return cert
+        except RateLimitError:
+            raise
         except Exception as e:
             logger.error(f"Failed to retrieve certificate from ACME list: {e}")
 
@@ -386,7 +393,7 @@ class HaricaClient:
 
         Args:
             id (str): The ID of the ACME account to retrieve certificates for.
-            status (CertificateStatus): The status of certificates to retrieve.
+            status (CertificateStatus): The status of certificates to retrieve, None for all.
 
         Returns:
             list[dict]: List of ACME certificates across all accounts filtered by status.
@@ -411,12 +418,14 @@ class HaricaClient:
                 response = self.__make_post_request(endpoint, data=payload)
                 response.raise_for_status()
                 certs = response.json()
+            except RateLimitError:
+                raise
             except Exception as e:
                 logger.error(f"Failed to get ACME certificates for account {account_id}: {e}")
                 continue
 
             for cert in certs:
-                if cert.get("statusName") == status.value:
+                if status is None or cert.get("statusName") == status.value:
                     cert["userEmail"] = user
                     acme_certs.append(cert)
 
@@ -1202,6 +1211,7 @@ class HaricaClient:
 
         Raises:
             ValueError: If the HTTP method is unsupported.
+            RateLimitError: If HARICA still answers 429 after RATE_LIMIT_RETRIES retries.
             Exception: If the API request fails (non-200 status code).
         """
         # Ensure we have the necessary request verification token
@@ -1223,17 +1233,33 @@ class HaricaClient:
         url = urljoin(self.base_url, endpoint)
 
         try:
-            # Send the request based on the chosen method (GET or POST)
-            if method == "GET":
-                response = self.session.get(url)
-            elif method == "POST":
-                # Handle different content types for POST requests
-                if content_type == "multipart/form-data":
-                    response = self.session.post(url, files=data)
+            for attempt in range(RATE_LIMIT_RETRIES + 1):
+                # Send the request based on the chosen method (GET or POST)
+                if method == "GET":
+                    response = self.session.get(url)
+                elif method == "POST":
+                    # Handle different content types for POST requests
+                    if content_type == "multipart/form-data":
+                        response = self.session.post(url, files=data)
+                    else:
+                        response = self.session.post(url, json=data)
                 else:
-                    response = self.session.post(url, json=data)
-            else:
-                raise ValueError("Unsupported method. Use 'GET' or 'POST'.")
+                    raise ValueError("Unsupported method. Use 'GET' or 'POST'.")
+
+                if response.status_code != 429:
+                    break
+                if attempt == RATE_LIMIT_RETRIES:
+                    raise RateLimitError(
+                        f"HARICA rate limit (429 Too Many Requests) on {endpoint}, "
+                        f"still failing after {RATE_LIMIT_RETRIES} retries. Retry later."
+                    )
+
+                # A 429 request was not processed, so sending it again is safe
+                delay = self._rate_limit_delay(response, attempt)
+                logger.warning(
+                    f"HARICA rate limit (429) on {endpoint}, retrying in {delay}s ({attempt + 1}/{RATE_LIMIT_RETRIES})"
+                )
+                time.sleep(delay)
 
             if response.status_code == 400 or response.status_code == 401:
                 raise PermissionError(response.text or "Permission denied.")
@@ -1249,6 +1275,23 @@ class HaricaClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error during {method} request to {url}: {e}")
             raise
+
+    @staticmethod
+    def _rate_limit_delay(response, attempt):
+        """
+        Seconds to wait before retrying a 429 response.
+
+        Args:
+            response (Response): The 429 response.
+            attempt (int): Number of retries already done.
+
+        Returns:
+            int: Retry-After when it is a number of seconds, otherwise 2, 4, 8, ...,
+                capped at RATE_LIMIT_MAX_DELAY.
+        """
+        retry_after = response.headers.get("Retry-After", "")
+        delay = int(retry_after) if retry_after.isdigit() else 2 ** (attempt + 1)
+        return min(delay, RATE_LIMIT_MAX_DELAY)
 
     def __make_get_request(self, endpoint, content_type="application/json"):
         """

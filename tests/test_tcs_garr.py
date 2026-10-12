@@ -8,6 +8,7 @@ from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from tcs_garr.commands.init import InitCommand
 from tcs_garr.commands.revoke import RevokeCommand
 from tcs_garr.commands.whoami import WhoamiCommand
+from tcs_garr.exceptions import RateLimitError
 from tcs_garr.main import logger, main
 import tcs_garr.main
 
@@ -100,6 +101,12 @@ class TestCommandLineInterface(unittest.TestCase):
         with self.assertLogs(level="ERROR") as cm:
             self.assertFalse(command.is_certificate_valid_for_revocation(None))
         self.assertIn("Certificate not found.", cm.output[0])
+
+    def test_rate_limit_error_exits_cleanly(self):
+        with patch.object(WhoamiCommand, "execute", side_effect=RateLimitError("HARICA rate limit")):
+            with self.assertLogs(logger=logger, level="ERROR") as cm:
+                self.exec_main(argv=["--no-check-release", "whoami"], exc=SystemExit)
+        self.assertIn("HARICA rate limit", cm.output[0])
 
     def test_init_runs_without_a_config_file(self):
         # 'init' creates the configuration, so it must run before the file exists
