@@ -101,6 +101,21 @@ class TestHaricaClientPayloads(unittest.TestCase):
             },
         )
 
+    def _pages(self, *pages):
+        self.post.side_effect = [MagicMock(json=MagicMock(return_value=page)) for page in pages]
+
+    def test_pending_transactions_reads_all_pages(self):
+        self._pages([{"transactionId": "a"}, {"transactionId": "b"}], [{"transactionId": "c"}], [])
+        transactions = self.client.get_pending_transactions()
+        self.assertEqual([t["transactionId"] for t in transactions], ["a", "b", "c"])
+        self.assertEqual([c.kwargs["data"]["startIndex"] for c in self.post.call_args_list], [0, 2, 3])
+        self.assertEqual(self.post.call_args.kwargs["data"]["status"], "Pending")
+
+    def test_pending_transactions_single_page(self):
+        self._pages([{"transactionId": "a"}], [])
+        self.assertEqual(len(self.client.get_pending_transactions()), 1)
+        self.assertEqual(self.post.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -232,7 +232,7 @@ class HaricaClient:
         """
         pending_status = CertificateStatus.PENDING
 
-        pending_certs = self.list_certificates(status=pending_status)
+        pending_certs = self._fetch_all_pages(lambda start: self.list_certificates(start_index=start, status=pending_status))
         logger.debug(json.dumps(pending_certs))
 
         for pc in pending_certs:
@@ -853,6 +853,23 @@ class HaricaClient:
 
         return p7b_data
 
+    def _fetch_all_pages(self, fetch_page):
+        """
+        Collects all the pages of a paginated HARICA list.
+
+        Args:
+            fetch_page (callable): Returns the page starting at the given index.
+
+        Returns:
+            list: The items of all pages, until HARICA returns an empty page.
+        """
+        items = []
+        while True:
+            page = fetch_page(len(items))
+            if not page:
+                return items
+            items.extend(page)
+
     def get_pending_transactions(self):
         """
         Retrieves a list of pending transactions.
@@ -860,20 +877,19 @@ class HaricaClient:
         Returns:
             List: A list of pending transactions.
         """
-        # Prepare the payload to retrieve SSL reviewable transactions
-        json_payload = {
-            "startIndex": 0,
-            "status": CertificateStatus.PENDING.value,
-            "filterPostDTOs": [],
-        }
 
-        # Make a POST request to fetch the pending SSL transactions
-        transactions = self.__make_post_request(
-            "/api/OrganizationValidatorSSL/GetSSLReviewableTransactions",
-            data=json_payload,
-        ).json()
+        def fetch_page(start_index):
+            json_payload = {
+                "startIndex": start_index,
+                "status": CertificateStatus.PENDING.value,
+                "filterPostDTOs": [],
+            }
+            return self.__make_post_request(
+                "/api/OrganizationValidatorSSL/GetSSLReviewableTransactions",
+                data=json_payload,
+            ).json()
 
-        return transactions
+        return self._fetch_all_pages(fetch_page)
 
     def approve_transaction(self, transaction_id):
         """
