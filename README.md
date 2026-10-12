@@ -415,15 +415,27 @@ tcs-garr --environment stg init
 8. **Generate validation token for domains**:
 
    ```bash
-   usage: tcs-garr validate [-h] --domains DOMAINS
+   usage: tcs-garr validate [-h] --domains DOMAINS [--method {dns,email}]
+                            [--email-user {admin,administrator,webmaster,hostmaster,postmaster}]
 
    options:
-   -h, --help         show this help message and exit
-   --domains DOMAINS  Comma separated list of domains.
+   -h, --help            show this help message and exit
+   --domains DOMAINS     Comma separated list of domains.
+   --method {dns,email}  Validation method: 'dns' (DNS change, 3.2.2.4.7) or
+                         'email' (constructed email to domain contact,
+                         3.2.2.4.4). Default: dns.
+   --email-user {admin,administrator,webmaster,hostmaster,postmaster}
+                         Mailbox that receives the token with --method email,
+                         as <email-user>@<domain>. Default: admin.
    ```
 
    This command generates validation tokens for the specified domains. Replace `DOMAINS`
    with a comma-separated list of domains you need to validate.
+
+   With the default `dns` method you receive an email with a token to publish as a DNS
+   TXT record. With `--method email` HARICA sends the validation link to
+   `<email-user>@<domain>` (e.g. `admin@example.org`), so no DNS change is needed, but
+   someone must read that mailbox.
 
    To get the list of all available domains in your organization, use the `domains`
    command.

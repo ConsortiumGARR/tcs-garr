@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 # "Unspecified", used by tcs-garr before reasons were selectable
 DEFAULT_REVOCATION_REASON = "4.9.1.1.1.1"
 
+# CA/B Forum Baseline Requirements domain validation methods offered to enterprise admins
+DOMAIN_VALIDATION_METHODS = {
+    "dns": "3.2.2.4.7",  # DNS Change
+    "email": "3.2.2.4.4",  # Constructed Email to Domain Contact
+}
+# Mailboxes accepted by 3.2.2.4.4, prepended to the domain being validated
+CONSTRUCTED_EMAIL_USERS = ["admin", "administrator", "webmaster", "hostmaster", "postmaster"]
+
 
 class HaricaClient:
     """
@@ -1102,7 +1110,7 @@ class HaricaClient:
 
         return self.__make_post_request("/api/OrganizationAdmin/GetAcmeEntries", data={"key": "", "value": ""}).json()
 
-    def validate_domains(self, domains=[]):
+    def validate_domains(self, domains=[], method="dns", email_user="admin"):
         """
         Create a validation token for the specified domains.
 
@@ -1113,6 +1121,9 @@ class HaricaClient:
 
         Args:
             domains (list): A list of domain names that need to be validated.
+            method (str): "dns" (DNS change) or "email" (constructed email to domain contact).
+            email_user (str): Mailbox for the "email" method, one of CONSTRUCTED_EMAIL_USERS.
+                The token is sent to <email_user>@<domain>.
 
         Raises:
             Exception: If there are no groups available or if domain validity data is not available.
@@ -1133,8 +1144,8 @@ class HaricaClient:
             "/api/OrganizationAdmin/GetDomainsValidityByGroupId", data={"id": group_id}
         ).json()
 
-        # List to store IDs of domains that need to be validated
-        domains_id_to_validate = []
+        # Domains (ID and name) that need to be validated
+        domains_to_validate = []
 
         # Check each domain's validity and filter the ones that need validation
         for item in domain_validities:
@@ -1144,18 +1155,19 @@ class HaricaClient:
 
             # If the domain is in the provided list, add its ID to the list for validation
             if domain_name in domains:
-                domains_id_to_validate.append(domain_id)
+                domains_to_validate.append((domain_id, domain_name))
 
         # Step 3: Create validation tokens for the domains that need validation
-        for domain_id in domains_id_to_validate:
+        for domain_id, domain_name in domains_to_validate:
             # Make a request to create the validation token for each domain
             self.__make_post_request(
                 "/api/OrganizationAdmin/CreatePrevalidatedValidation",
                 data={
                     "usersEmail": self.email,
-                    "validationMethodName": "3.2.2.4.7",  # Fixed validation method name
+                    "validationMethodName": DOMAIN_VALIDATION_METHODS[method],
                     "organizationId": domain_id,  # ID of the domain to validate
-                    "whoisEmail": "",  # Empty WHOIS email, can be customized
+                    # Recipient of the token for the constructed email method
+                    "whoisEmail": f"{email_user}@{domain_name}" if method == "email" else "",
                 },
             )
 
