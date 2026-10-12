@@ -9,7 +9,7 @@ from packaging import version
 from typing import Optional
 
 from tcs_garr.commands.base import BaseCommand
-from tcs_garr.exceptions import RateLimitError
+from tcs_garr.exceptions import ErrorPageError, RateLimitError
 from tcs_garr.logger import setup_logger
 from tcs_garr.utils import check_pypi_version, get_current_version, HaricaClientConfig
 
@@ -144,7 +144,7 @@ def main(argv: Optional[list[str]] = None):
         command_instance = commands_instances[args.command]
         try:
             command_instance.execute()
-        except RateLimitError as err:
+        except (ErrorPageError, RateLimitError) as err:
             logger.error(f"❌ {err}")
             exit(1)
     else:

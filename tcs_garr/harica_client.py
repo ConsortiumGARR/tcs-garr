@@ -5,13 +5,13 @@ import logging
 import time
 import zipfile
 from threading import Lock
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import jwt
 import requests
 from bs4 import BeautifulSoup
 
-from .exceptions import CertificateNotApprovedException, RateLimitError
+from .exceptions import CertificateNotApprovedException, ErrorPageError, RateLimitError
 
 from .utils import generate_otp, CertificateStatus, UserRole
 
@@ -191,6 +191,9 @@ class HaricaClient:
         login_response.raise_for_status()
 
         self.token = login_response.text
+
+        # The token read before the login belongs to the anonymous session
+        self.request_verification_token = None
         if not self.token:
             if self.totp_seed:
                 raise Exception("Failed to retrieve JWT token.")
@@ -1212,10 +1215,13 @@ class HaricaClient:
         Raises:
             ValueError: If the HTTP method is unsupported.
             RateLimitError: If HARICA still answers 429 after RATE_LIMIT_RETRIES retries.
+            ErrorPageError: If HARICA redirects the call to its /Error page.
             Exception: If the API request fails (non-200 status code).
         """
-        # Ensure we have the necessary request verification token
-        self.__get_request_verification_token()
+        # The token stays valid for the whole session, the web frontend reuses it too
+        token_reused = bool(self.request_verification_token)
+        if not token_reused:
+            self.__get_request_verification_token()
 
         # Update headers for authentication and content type
         self.session.headers.update(
@@ -1260,6 +1266,15 @@ class HaricaClient:
                     f"HARICA rate limit (429) on {endpoint}, retrying in {delay}s ({attempt + 1}/{RATE_LIMIT_RETRIES})"
                 )
                 time.sleep(delay)
+
+            # HARICA answers a rejected RequestVerificationToken with a redirect to /Error
+            if response.history and urlparse(response.url).path == "/Error":
+                self.request_verification_token = None
+                # Only reads are sent again: a write may have been processed before the error
+                if token_reused and endpoint.rsplit("/", 1)[-1].startswith(("Get", "Search", "Check")):
+                    logger.debug(f"{endpoint} redirected to /Error, retrying with a new token")
+                    return self.__make_api_request(endpoint, method=method, data=data, content_type=content_type)
+                raise ErrorPageError(f"HARICA redirected {endpoint} to its error page. Retry later.")
 
             if response.status_code == 400 or response.status_code == 401:
                 raise PermissionError(response.text or "Permission denied.")

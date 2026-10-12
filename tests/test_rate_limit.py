@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tcs_garr.exceptions import RateLimitError
+from tcs_garr.exceptions import ErrorPageError, RateLimitError
 from tcs_garr.harica_client import RATE_LIMIT_RETRIES, HaricaClient
 
 
 def response(status, retry_after=None):
     headers = {"Retry-After": retry_after} if retry_after is not None else {}
-    return MagicMock(status_code=status, headers=headers, text="")
+    return MagicMock(status_code=status, headers=headers, text="", history=[])
 
 
 class TestRateLimit(unittest.TestCase):
@@ -54,6 +54,55 @@ class TestRateLimit(unittest.TestCase):
         with patch.object(self.client, "list_certificates", return_value=[]):
             with self.assertRaises(RateLimitError):
                 self.client.get_certificate("tx-1")
+
+
+class TestRequestVerificationToken(unittest.TestCase):
+    def setUp(self):
+        with patch.object(HaricaClient, "prepare_client"):
+            self.client = HaricaClient("user@example.org", "password")
+        self.client.session = MagicMock()
+        self.client.session.post.return_value = response(200)
+        self.fetch = MagicMock(side_effect=lambda: setattr(self.client, "request_verification_token", "csrf"))
+        self.client._HaricaClient__get_request_verification_token = self.fetch
+
+    def test_token_is_fetched_once_per_session(self):
+        for _ in range(3):
+            self.client.api_post("/api/Test")
+        self.fetch.assert_called_once()
+
+    def test_token_is_fetched_again_after_login(self):
+        self.client.session.post.return_value = MagicMock(status_code=200, text="jwt", history=[])
+        with patch.object(
+            self.client, "get_logged_in_user_profile", return_value={"role": "User", "fullName": "", "organization": ""}
+        ):
+            self.client.login()
+        self.assertIsNone(self.client.request_verification_token)
+        self.client.api_post("/api/Test")
+        self.assertEqual(self.fetch.call_count, 2)
+
+    def _error_page(self):
+        return MagicMock(status_code=200, history=[MagicMock(status_code=302)], url="https://cm.harica.gr/Error")
+
+    def test_read_redirected_to_error_retries_with_new_token(self):
+        self.client.request_verification_token = "stale"
+        self.client.session.post.side_effect = [self._error_page(), response(200)]
+        self.assertEqual(self.client.api_post("/api/User/GetCurrentUser").status_code, 200)
+        self.fetch.assert_called_once()
+        self.assertEqual(self.client.session.post.call_count, 2)
+
+    def test_write_redirected_to_error_is_not_sent_again(self):
+        self.client.request_verification_token = "stale"
+        self.client.session.post.return_value = self._error_page()
+        with self.assertRaises(ErrorPageError):
+            self.client.api_post("/api/OrganizationValidatorSSL/RevokeCertificate")
+        self.assertEqual(self.client.session.post.call_count, 1)
+        self.assertIsNone(self.client.request_verification_token)
+
+    def test_error_page_with_fresh_token_is_not_retried(self):
+        self.client.session.post.return_value = self._error_page()
+        with self.assertRaises(ErrorPageError):
+            self.client.api_post("/api/User/GetCurrentUser")
+        self.assertEqual(self.client.session.post.call_count, 1)
 
 
 if __name__ == "__main__":
