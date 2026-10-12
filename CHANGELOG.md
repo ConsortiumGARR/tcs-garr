@@ -1,3 +1,9 @@
+## 0.28.2-rc.0 (2026-10-12)
+
+### Fix
+
+- keep certificate IDs with --full and drop Completed duplicates in list
+
 ## 0.28.1 (2026-10-12)
 
 ## 0.28.1-rc.0 (2026-10-12)
