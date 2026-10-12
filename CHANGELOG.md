@@ -1,3 +1,19 @@
+## 0.28.0-rc.0 (2026-10-12)
+
+### Feat
+
+- add smime-validator and clientauth-validator commands
+- add constructed email method to validate
+
+### Fix
+
+- retry HARICA rate limits and stop hiding them
+- read all pages of pending SSL requests
+
+### Perf
+
+- reuse the CSRF token for the whole session
+
 ## 0.27.0 (2026-10-11)
 
 ## 0.27.0-rc.0 (2026-10-11)
