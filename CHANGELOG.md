@@ -1,3 +1,10 @@
+## 0.28.1-rc.0 (2026-10-12)
+
+### Fix
+
+- show the Client Authentication approver role
+- report domains that validate could not submit
+
 ## 0.28.0 (2026-10-12)
 
 ## 0.28.0-rc.0 (2026-10-12)
