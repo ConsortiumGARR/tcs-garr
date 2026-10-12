@@ -442,6 +442,9 @@ tcs-garr --environment stg init
    `<email-user>@<domain>` (e.g. `admin@example.org`), so no DNS change is needed, but
    someone must read that mailbox.
 
+   Domains that do not belong to your organization, or whose prevalidation HARICA
+   refuses, are reported as errors and the command exits with a non-zero status.
+
    To get the list of all available domains in your organization, use the `domains`
    command.
 

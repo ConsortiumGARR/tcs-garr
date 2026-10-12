@@ -1319,6 +1319,10 @@ class HaricaClient:
             email_user (str): Mailbox for the "email" method, one of CONSTRUCTED_EMAIL_USERS.
                 The token is sent to <email_user>@<domain>.
 
+        Returns:
+            dict: For each requested domain, True if the validation was submitted, False if
+                HARICA refused it, None if the domain does not belong to the organization.
+
         Raises:
             Exception: If there are no groups available or if domain validity data is not available.
         """
@@ -1344,17 +1348,19 @@ class HaricaClient:
         # Check each domain's validity and filter the ones that need validation
         for item in domain_validities:
             domain_id = item["organizationId"]
-            domain_name = item["domain"]
+            domain_name = item["domain"].lower()
             # domain_validity = datetime.fromisoformat(item["validity"])
 
             # If the domain is in the provided list, add its ID to the list for validation
             if domain_name in domains:
                 domains_to_validate.append((domain_id, domain_name))
 
+        results = {domain: None for domain in domains}
+
         # Step 3: Create validation tokens for the domains that need validation
         for domain_id, domain_name in domains_to_validate:
             # Make a request to create the validation token for each domain
-            self.__make_post_request(
+            response = self.__make_post_request(
                 "/api/OrganizationAdmin/CreatePrevalidatedValidation",
                 data={
                     "usersEmail": self.email,
@@ -1364,6 +1370,9 @@ class HaricaClient:
                     "whoisEmail": f"{email_user}@{domain_name}" if method == "email" else "",
                 },
             )
+            results[domain_name] = response.status_code == 200
+
+        return results
 
     def __make_api_request(self, endpoint, method="GET", data=None, content_type="application/json"):
         """

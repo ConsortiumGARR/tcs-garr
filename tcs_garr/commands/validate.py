@@ -68,15 +68,25 @@ class ValidateCommand(BaseCommand):
         - Green check mark (✅) if the prevalidation has been submitted successfully.
         """
         # Split the comma-separated domains into a list
-        domains = self.args.domains.split(",")
+        domains = [domain.strip().lower() for domain in self.args.domains.split(",") if domain.strip()]
 
         # Submit the domains for validation via the Harica client
-        self.harica_client.validate_domains(domains, method=self.args.method, email_user=self.args.email_user)
+        results = self.harica_client.validate_domains(domains, method=self.args.method, email_user=self.args.email_user)
 
         # Log the result for each domain
-        for domain in domains:
-            if self.args.method == "email":
-                next_step = f"{self.args.email_user}@{domain} will receive an email soon with the validation link."
+        for domain, submitted in results.items():
+            if submitted is None:
+                self.logger.error(
+                    f"{Fore.RED}❌ Domain {domain} is not a domain of your organization, see 'tcs-garr domains'.{Style.RESET_ALL}"
+                )
+            elif not submitted:
+                self.logger.error(f"{Fore.RED}❌ HARICA refused the prevalidation of domain {domain}.{Style.RESET_ALL}")
             else:
-                next_step = "You will receive an email soon with token to configure DNS."
-            self.logger.info(f"{Fore.GREEN}✅ Domain {domain} prevalidation submitted. {next_step}{Style.RESET_ALL}")
+                if self.args.method == "email":
+                    next_step = f"{self.args.email_user}@{domain} will receive an email soon with the validation link."
+                else:
+                    next_step = "You will receive an email soon with token to configure DNS."
+                self.logger.info(f"{Fore.GREEN}✅ Domain {domain} prevalidation submitted. {next_step}{Style.RESET_ALL}")
+
+        if not all(results.values()):
+            exit(1)
