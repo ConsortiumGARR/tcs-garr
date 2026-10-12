@@ -81,7 +81,7 @@ class RevokeCommand(BaseCommand):
         """
         Executes the command to revoke a certificate using the provided ID.
         """
-        is_user_only = self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1
+        is_user_only = self.harica_client.uses_user_endpoints()
 
         reasons_scope = "user" if is_user_only else "ssl"
 

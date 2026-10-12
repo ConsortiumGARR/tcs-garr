@@ -1528,6 +1528,16 @@ class HaricaClient:
         """Check if the user has a specific role."""
         return role in self.roles
 
+    def uses_user_endpoints(self) -> bool:
+        """
+        Whether certificates must be read and revoked with the endpoints for users
+        without enterprise roles, instead of the SSL enterprise ones.
+
+        The Client Authentication approver role is ignored: it was not tracked when this
+        rule was written, so users with only that role keep the user endpoints.
+        """
+        return self.roles - {UserRole.CLIENT_AUTH_SMIME_ENTERPRISE_APPROVER} == {UserRole.USER}
+
     def get_user_roles(self) -> str:
         """Get a comma-separated string of user roles."""
         return ", ".join(role.value for role in self.roles)

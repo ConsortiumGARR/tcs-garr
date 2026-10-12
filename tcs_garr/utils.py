@@ -22,6 +22,7 @@ class UserRole(Enum):
     USER = "User"
     SMIME_ENTERPRISE_APPROVER = "SMIME Enterprise Approver"
     SSL_ENTERPRISE_APPROVER = "SSL Enterprise Approver"
+    CLIENT_AUTH_SMIME_ENTERPRISE_APPROVER = "Client Authentication-S/MIME Enterprise Approver"
 
     def __str__(self):
         return self.value

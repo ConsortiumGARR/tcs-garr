@@ -186,7 +186,7 @@ class DownloadCommand(BaseCommand):
         try:
             # if user role is only USER and does not have any other role
             # do not use enterprise apis
-            if self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1:
+            if self.harica_client.uses_user_endpoints():
                 certificate = self.harica_client.get_user_certificate(self.args.id)
             else:
                 certificate = self.harica_client.get_certificate(self.args.id)
