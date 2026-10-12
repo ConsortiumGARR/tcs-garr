@@ -1,6 +1,6 @@
 # TCS-GARR Client
 
-![Version](https://img.shields.io/badge/Version-0.28.0-brightgreen.svg)
+![Version](https://img.shields.io/badge/Version-0.28.1-rc.0-brightgreen.svg)
 
 [![python](https://img.shields.io/badge/Python-3.9%2B-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
@@ -441,6 +441,9 @@ tcs-garr --environment stg init
    TXT record. With `--method email` HARICA sends the validation link to
    `<email-user>@<domain>` (e.g. `admin@example.org`), so no DNS change is needed, but
    someone must read that mailbox.
+
+   Domains that do not belong to your organization, or whose prevalidation HARICA
+   refuses, are reported as errors and the command exits with a non-zero status.
 
    To get the list of all available domains in your organization, use the `domains`
    command.

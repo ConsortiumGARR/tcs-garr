@@ -393,7 +393,7 @@ class ListCertificatesCommand(BaseCommand):
 
         # if user role is only USER and does not have any other role
         # get only user certificates
-        if self.harica_client.has_role(UserRole.USER) and len(self.harica_client.roles) == 1:
+        if self.harica_client.uses_user_endpoints():
             certificates, recap = self.list_certificates_as_user(statuses, full_info=full_info)
         else:
             certificates, recap = self.list_certificates_as_admin(username, statuses, full_info=full_info)
