@@ -304,7 +304,7 @@ class ListCertificatesCommand(BaseCommand):
         """
         certificates = []
 
-        for status in statuses:
+        for status in sorted(statuses, key=list(CertificateStatus).index):
             # If an acme account id is provided, do not retrieve api certificates
             if not self.args.acme_account_id:
                 start_index = 0
@@ -326,7 +326,19 @@ class ListCertificatesCommand(BaseCommand):
             )
             certificates.extend(acme_certificates)
 
-        return self._filter_certificates(certificates, statuses, username)
+        # Completed requests are also listed as Valid, Revoked or Expired certificates:
+        # keep the first entry of each transaction, which has the certificate status.
+        seen = set()
+        unique_certificates = []
+        for cert in certificates:
+            transaction_id = cert.get("transactionId")
+            if transaction_id:
+                if transaction_id in seen:
+                    continue
+                seen.add(transaction_id)
+            unique_certificates.append(cert)
+
+        return self._filter_certificates(unique_certificates, statuses, username)
 
     def list_certificates_as_user(self, statuses, full_info=False):
         """
