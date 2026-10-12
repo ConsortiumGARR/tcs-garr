@@ -378,10 +378,7 @@ class HaricaClient:
             cert["status"] = status.value
 
             if full_info:
-                cert_info = self.get_certificate_info(cert["transactionId"])
-
-                for key, value in cert_info.items():
-                    cert[key] = value
+                self._add_certificate_info(cert)
         return data
 
     def list_user_certificates(self, full_info: bool = False):
@@ -405,12 +402,16 @@ class HaricaClient:
             cert["user"] = self.full_name
 
             if full_info:
-                cert_info = self.get_certificate_info(cert["transactionId"])
-
-                for key, value in cert_info.items():
-                    cert[key] = value
+                self._add_certificate_info(cert)
 
         return data
+
+    def _add_certificate_info(self, cert):
+        """Adds the GetSSLCertificate fields missing from a list entry."""
+        # Fields of the list entry win: GetSSLCertificate returns transactionId null
+        # and isRevoked false for revoked certificates.
+        for key, value in self.get_certificate_info(cert["transactionId"]).items():
+            cert.setdefault(key, value)
 
     def list_acme_certificates(self, id: str = None, status: CertificateStatus = CertificateStatus.VALID):
         """
