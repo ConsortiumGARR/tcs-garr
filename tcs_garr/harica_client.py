@@ -26,6 +26,29 @@ DOMAIN_VALIDATION_METHODS = {
     "dns": "3.2.2.4.7",  # DNS Change
     "email": "3.2.2.4.4",  # Constructed Email to Domain Contact
 }
+# Enterprise validator endpoints, same actions for S/MIME and Client Authentication
+ENTERPRISE_VALIDATOR_ENDPOINTS = {
+    "smime": {
+        "requests": "/api/OrganizationValidatorSmime/GetEnterpriseTransactions",
+        "certificates": "/api/OrganizationValidatorSmime/GetEnterpriseCertificates",
+        "review": "/api/OrganizationValidatorSmime/UpdateEnterpriseReview",
+        "cancel": "/api/OrganizationValidatorSmime/CancelTransaction",
+        "revoke": "/api/OrganizationValidatorSmime/RevokeCertificate",
+        "reasons": "/api/OrganizationValidatorSmime/GetRevocationReasons",
+    },
+    "clientauth": {
+        "requests": "/api/OrganizationValidatorClientAuthentication/GetEnterpriseClientAuthenticationRequests",
+        "certificates": "/api/OrganizationValidatorClientAuthentication/GetEnterpriseClientAuthenticationCertificates",
+        "review": "/api/OrganizationValidatorClientAuthentication/UpdateEnterpriseReview",
+        "cancel": "/api/OrganizationValidatorClientAuthentication/CancelEnterpriseTransaction",
+        "revoke": "/api/OrganizationValidatorClientAuthentication/RevokeEnterpriseClientCertificate",
+        "reasons": "/api/OrganizationValidatorClientAuthentication/GetRevocationReasons",
+    },
+}
+# Status names of the enterprise validator requests, "Canceled" with one "l" unlike SSL
+ENTERPRISE_REQUEST_STATUSES = ["Pending", "Ready", "Completed", "Canceled"]
+ENTERPRISE_CERTIFICATE_STATUSES = ["Valid", "Revoked", "Expired"]
+
 # Retries after a 429 Too Many Requests, waiting 2, 4, 8 and 16 seconds unless
 # HARICA sends Retry-After
 RATE_LIMIT_RETRIES = 4
@@ -876,11 +899,14 @@ class HaricaClient:
             list: The items of all pages, until HARICA returns an empty page.
         """
         items = []
+        previous = None
         while True:
             page = fetch_page(len(items))
-            if not page:
+            # Also stop if HARICA ignores startIndex and repeats the same page
+            if not page or page == previous:
                 return items
             items.extend(page)
+            previous = page
 
     def get_pending_transactions(self):
         """
@@ -990,7 +1016,8 @@ class HaricaClient:
 
         Args:
             scope (str): "user" for users without enterprise roles, "ssl" for SSL
-                approvers, "admin" for enterprise admins (e.g. ACME certificates).
+                approvers, "admin" for enterprise admins (e.g. ACME certificates),
+                "smime" and "clientauth" for the enterprise approvers of those areas.
 
         Returns:
             list[dict]: Reasons with "name" (the code) and "revocationMessage".
@@ -999,6 +1026,7 @@ class HaricaClient:
             "user": "/api/Certificate/GetRevocationReasons",
             "ssl": "/api/OrganizationValidatorSSL/GetRevocationReasons",
             "admin": "/api/OrganizationAdmin/GetRevocationReasons",
+            **{area: endpoints["reasons"] for area, endpoints in ENTERPRISE_VALIDATOR_ENDPOINTS.items()},
         }
 
         response = self.__make_post_request(endpoints[scope])
@@ -1068,6 +1096,144 @@ class HaricaClient:
         """
         payload = {"transactionId": cert_id, "name": reason, "message": message}
         response = self.__make_post_request("/api/OrganizationAdmin/RevokeAcmeCertificate", data=payload)
+
+        return response.status_code == 200
+
+    def list_enterprise_requests(self, area: str, status: str = "Pending") -> list[dict]:
+        """
+        Retrieves the requests that an enterprise approver can review.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            status (str): One of ENTERPRISE_REQUEST_STATUSES.
+
+        Returns:
+            list[dict]: Requests of all pages.
+        """
+        endpoint = ENTERPRISE_VALIDATOR_ENDPOINTS[area]["requests"]
+
+        def fetch_page(start_index):
+            payload = {"startIndex": start_index, "status": status, "filterPostDTOs": []}
+            response = self.__make_post_request(endpoint, data=payload)
+            # HARICA answers an unknown status with an empty body
+            return response.json() if response.text else []
+
+        return self._fetch_all_pages(fetch_page)
+
+    def list_enterprise_certificates(self, area: str, status: str = "Valid") -> list[dict]:
+        """
+        Retrieves the certificates of the requests handled by enterprise approvers.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            status (str): One of ENTERPRISE_CERTIFICATE_STATUSES.
+
+        Returns:
+            list[dict]: Certificates of all pages.
+        """
+        endpoint = ENTERPRISE_VALIDATOR_ENDPOINTS[area]["certificates"]
+
+        def fetch_page(start_index):
+            payload = {"startIndex": start_index, "filterPostDTOs": []}
+            if area == "clientauth":
+                # Same defaults as the web frontend: from the epoch to now
+                payload.update(
+                    selectedList=status,
+                    dateFrom="1970-01-01T00:00:00.000Z",
+                    dateTo=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                )
+            else:
+                payload["status"] = status
+            response = self.__make_post_request(endpoint, data=payload)
+            return response.json() if response.text else []
+
+        return self._fetch_all_pages(fetch_page)
+
+    def approve_enterprise_request(self, area: str, transaction_id: str) -> bool:
+        """
+        Approves a pending request by submitting its open reviews, as approve does for SSL.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            transaction_id (str): The ID of the pending request.
+
+        Returns:
+            bool: True if all reviews were submitted, False if there was nothing to review
+                or HARICA refused a review.
+        """
+        reviews = [
+            (review["reviewId"], review["reviewValue"])
+            for request in self.list_enterprise_requests(area, "Pending")
+            if request.get("transactionId") == transaction_id
+            for review in request.get("reviewGetDTOs") or []
+            if not review.get("isReviewed") and review.get("reviewId") and "reviewValue" in review
+        ]
+        if not reviews:
+            logger.warning(f"No available reviews for transaction with ID {transaction_id}")
+            return False
+
+        for review_id, review_value in reviews:
+            payload = {
+                "reviewId": (None, review_id),
+                "isValid": (None, "true"),
+                "informApplicant": (None, "true"),
+                "reviewMessage": (None, f"Approved via harica-cli by {self.email}"),
+                "reviewValue": (None, review_value),
+            }
+            response = self.__make_post_request(
+                ENTERPRISE_VALIDATOR_ENDPOINTS[area]["review"], data=payload, content_type="multipart/form-data"
+            )
+            if response.status_code != 200:
+                logger.error(f"Failed to approve review {review_id} for transaction {transaction_id}")
+                return False
+
+        return True
+
+    def cancel_enterprise_request(self, area: str, transaction_id: str, message: str, inform_applicant: bool) -> bool:
+        """
+        Cancels a request of another user as enterprise approver.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            transaction_id (str): The ID of the request.
+            message (str): Status message shown for the request.
+            inform_applicant (bool): Send the message to the applicant by email.
+
+        Returns:
+            bool: True if the request was cancelled, False otherwise.
+        """
+        payload = {
+            "transactionId": transaction_id,
+            "notes": f"Cancelled via harica-cli by {self.email}",
+            "statusMessage": message,
+            "informApplicant": inform_applicant,
+        }
+        response = self.__make_post_request(ENTERPRISE_VALIDATOR_ENDPOINTS[area]["cancel"], data=payload)
+
+        return response.status_code == 200
+
+    def revoke_enterprise_certificate(
+        self, area: str, transaction_id: str, reason: str = DEFAULT_REVOCATION_REASON, message: str = ""
+    ) -> bool:
+        """
+        Revokes a certificate as enterprise approver.
+
+        Args:
+            area (str): "smime" or "clientauth".
+            transaction_id (str): The transaction ID of the certificate.
+            reason (str): Revocation reason code.
+            message (str): Message for the certificate owner.
+
+        Returns:
+            bool: True if the revocation was successful, False otherwise.
+        """
+        payload = {
+            "transactionId": transaction_id,
+            "name": reason,
+            "notes": f"Revoked via harica-cli by {self.email}",
+            "message": message,
+        }
+        response = self.__make_post_request(ENTERPRISE_VALIDATOR_ENDPOINTS[area]["revoke"], data=payload)
 
         return response.status_code == 200
 

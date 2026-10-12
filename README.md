@@ -77,6 +77,7 @@ Other roles, apart from **USER**, require 2FA and are provided by an administrat
 | cancel   | USER                                        | ❌         |
 | acme     | ENTERPRISE_ADMIN                            | ✔️         |
 | apikey   | ENTERPRISE_ADMIN or any ENTERPRISE_APPROVER | ✔️         |
+| clientauth-validator | CLIENT_AUTH_ENTERPRISE_APPROVER | ✔️         |
 | domains  | ENTERPRISE_ADMIN                            | ✔️         |
 | download | USER                                        | ❌         |
 | init     | None                                        | ❌         |
@@ -85,6 +86,7 @@ Other roles, apart from **USER**, require 2FA and are provided by an administrat
 | request  | USER                                        | ❌         |
 | revoke   | USER                                        | ❌         |
 | smime    | ENTERPRISE_ADMIN                            | ❌         |
+| smime-validator | SMIME_ENTERPRISE_APPROVER            | ✔️         |
 | upgrade  | None                                        | ❌         |
 | validate | ENTERPRISE_ADMIN                            | ✔️         |
 | whoami   | USER                                        | ❌         |
@@ -170,17 +172,19 @@ To see all available commands and options:
 tcs-garr --help
 
 usage: tcs-garr [-h] [--debug] [--version] [--no-check-release] [--environment {production,stg}]
-                {acme,apikey,approve,cancel,domains,download,init,k8s,list,request,revoke,smime,test,upgrade,validate,whoami} ...
+                {acme,apikey,approve,cancel,clientauth-validator,domains,download,init,k8s,list,request,revoke,smime,smime-validator,test,upgrade,validate,whoami} ...
 
 Harica Certificate Manager
 
 positional arguments:
-  {acme,apikey,approve,cancel,domains,download,init,k8s,list,request,revoke,smime,test,upgrade,validate,whoami}
+  {acme,apikey,approve,cancel,clientauth-validator,domains,download,init,k8s,list,request,revoke,smime,smime-validator,test,upgrade,validate,whoami}
                         Available commands
     acme                List ACME accounts configured in Harica
     apikey              Manage your HARICA API keys
     approve             Approve a certificate by ID
     cancel              Cancel a request by ID
+    clientauth-validator
+                        Review Client Authentication requests and certificates as enterprise approver
     domains             List available domains
     download            Download a certificate by ID
     init                Generate Harica config file
@@ -189,6 +193,7 @@ positional arguments:
     request             Request a new certificate
     revoke              Revoke a certificate by ID
     smime               Request a new S/MIME certificate
+    smime-validator     Review S/MIME requests and certificates as enterprise approver
     test                Test Harica API endpoints
     upgrade             Self-upgrade command for the app.
     validate            Create validation token for domains
@@ -589,6 +594,29 @@ tcs-garr --environment stg init
    profile page of CertManager. HARICA grants API keys only to Enterprise Admins and
    Enterprise Approvers, up to 3 keys per user. The code of a new key is printed only
    once by `create`: store it securely.
+
+16. **S/MIME and Client Authentication approvers**:
+
+   ```bash
+   usage: tcs-garr smime-validator [-h] {requests,certificates,approve,cancel,revoke} ...
+   usage: tcs-garr clientauth-validator [-h] {requests,certificates,approve,cancel,revoke} ...
+
+   positional arguments:
+   {requests,certificates,approve,cancel,revoke}
+      requests            List requests (--status Pending|Ready|Completed|Canceled)
+      certificates        List certificates (--status Valid|Revoked|Expired)
+      approve             Approve a pending request (--id)
+      cancel              Cancel a request of another user (--id, --message, --inform-applicant)
+      revoke              Revoke a certificate (--id or --list-reasons, --reason, --message)
+   ```
+
+   These commands do for S/MIME and Client Authentication what `approve`, `revoke` and
+   `list` do for SSL, with the enterprise approver role of each area. `approve`,
+   `cancel` and `revoke` ask for confirmation.
+
+   S/MIME email-only requests need no approval: once the applicant validates the
+   mailbox they move straight to `Ready`. Approval is needed for the types that include
+   identity or organization data.
 
 ## 🐍 Usage from Python
 
